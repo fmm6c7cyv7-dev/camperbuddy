@@ -6,6 +6,9 @@ function DashboardView({ setActiveTab }) {
   const [topProposal, setTopProposal] = useState(null);
   const [latestEntry, setLatestEntry] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  // NYTT: State för att visa den proaktiva assistenten (satt till true för att vi ska se den när vi kodar)
+  const [showAssistant, setShowAssistant] = useState(true);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -62,14 +65,49 @@ function DashboardView({ setActiveTab }) {
         <button style={actionBtnStyle} onClick={() => setActiveTab('convoy')}><Plus color="#2D5A27" /><span>Ny plats</span></button>
         <button style={actionBtnStyle} onClick={() => setActiveTab('logbook')}><Camera color="#3498DB" /><span>Nytt minne</span></button>
       </div>
+
+      {/* NYTT: Modal för Proaktiva Assistenten */}
+      {showAssistant && (
+        <div style={overlayStyle}>
+          <div style={modalStyle}>
+            <h2>Assistenten kommer här!</h2>
+            <button onClick={() => setShowAssistant(false)}>Stäng (Kör vidare)</button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
 
+// Gamla styles
 const sectionStyle = { marginBottom: '20px', cursor: 'pointer' };
 const sectionHeaderStyle = { fontSize: '12px', fontWeight: 'bold', color: '#95A5A6', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' };
 const cardStyle = { backgroundColor: '#FFF', padding: '15px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' };
 const badgeStyle = { backgroundColor: '#F5F2ED', padding: '4px 8px', borderRadius: '10px', fontSize: '12px' };
 const actionBtnStyle = { flex: 1, backgroundColor: '#FFF', border: 'none', padding: '15px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' };
+
+// NYA styles för modalen
+const overlayStyle = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(0,0,0,0.5)', // Mörkar ner bakgrunden
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  zIndex: 1000 // Ser till att den hamnar överst
+};
+
+const modalStyle = {
+  backgroundColor: '#FFF',
+  padding: '20px',
+  borderRadius: '20px',
+  width: '85%',
+  maxWidth: '350px',
+  boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+};
 
 export default DashboardView;
