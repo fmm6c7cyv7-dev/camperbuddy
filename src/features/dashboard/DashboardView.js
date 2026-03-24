@@ -10,6 +10,7 @@ import {
   Sunrise,
   Sunset,
   Cloud,
+  Star,
 } from 'lucide-react';
 
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -45,6 +46,31 @@ const singleServiceIcons = {
   default: createPoiIcon('gold'),
 };
 
+// --- VÅRA STJÄRN-IKONER ---
+const officialStarIcon = L.divIcon({
+  html: `<div style="filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.3)); transform: translateY(-5px);">
+           <svg width="32" height="32" viewBox="0 0 24 24" fill="#FFD700" stroke="#B8860B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+           </svg>
+         </div>`,
+  className: '',
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+  popupAnchor: [0, -32],
+});
+
+const draftStarIcon = L.divIcon({
+  html: `<div style="filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2)); opacity: 0.85;">
+           <svg width="26" height="26" viewBox="0 0 24 24" fill="#EAE5DD" stroke="#A9B4B5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+           </svg>
+         </div>`,
+  className: '',
+  iconSize: [26, 26],
+  iconAnchor: [13, 26],
+  popupAnchor: [0, -26],
+});
+
 const SERVICE_META = {
   parking: { label: 'Parkering / Sova', color: '#4D8A57' },
   graywater: { label: 'Gråvatten', color: '#7E8A8A' },
@@ -56,33 +82,10 @@ function normalizePoiCategory(rawCategory) {
   const category = String(rawCategory || 'default').trim().toLowerCase();
 
   const categoryMap = {
-    parking: 'parking',
-    parkering: 'parking',
-    ställplats: 'parking',
-    stallplats: 'parking',
-    overnight: 'parking',
-    sleep: 'parking',
-    sova: 'parking',
-    graywater: 'graywater',
-    greywater: 'graywater',
-    gråvatten: 'graywater',
-    gravatten: 'graywater',
-    markbrunn: 'graywater',
-    blackwater: 'blackwater',
-    svartvatten: 'blackwater',
-    latrin: 'blackwater',
-    cassette: 'blackwater',
-    kassett: 'blackwater',
-    toilet: 'blackwater',
-    wc: 'blackwater',
-    waste: 'blackwater',
-    freshwater: 'freshwater',
-    freshwater_fill: 'freshwater',
-    water: 'freshwater',
-    vatten: 'freshwater',
-    dricksvatten: 'freshwater',
-    färskvatten: 'freshwater',
-    farskvatten: 'freshwater',
+    parking: 'parking', parkering: 'parking', ställplats: 'parking', stallplats: 'parking', overnight: 'parking', sleep: 'parking', sova: 'parking',
+    graywater: 'graywater', greywater: 'graywater', gråvatten: 'graywater', gravatten: 'graywater', markbrunn: 'graywater',
+    blackwater: 'blackwater', svartvatten: 'blackwater', latrin: 'blackwater', cassette: 'blackwater', kassett: 'blackwater', toilet: 'blackwater', wc: 'blackwater', waste: 'blackwater',
+    freshwater: 'freshwater', freshwater_fill: 'freshwater', water: 'freshwater', vatten: 'freshwater', dricksvatten: 'freshwater', färskvatten: 'freshwater', farskvatten: 'freshwater',
   };
 
   return categoryMap[category] || category;
@@ -161,48 +164,25 @@ function buildTextBlob(poi) {
 
 function textSuggestsParking(text) {
   return [
-    'ställplats',
-    'stallplats',
-    'parkering',
-    'sovplats',
-    'vid ställplats',
-    'vid stallplats',
-    'overnight',
-    'husbilsplats',
+    'ställplats', 'stallplats', 'parkering', 'sovplats', 'vid ställplats', 'vid stallplats', 'overnight', 'husbilsplats',
   ].some((term) => text.includes(term));
 }
 
 function textSuggestsGraywater(text) {
   return [
-    'markbrunn',
-    'gråvatten',
-    'gravatten',
-    'fast tank',
-    'gråvatten tömning',
-    'gråvattentömning',
+    'markbrunn', 'gråvatten', 'gravatten', 'fast tank', 'gråvatten tömning', 'gråvattentömning',
   ].some((term) => text.includes(term));
 }
 
 function textSuggestsBlackwater(text) {
   return [
-    'kassett',
-    'kassettömning',
-    'latrin',
-    'kemtoa',
-    'svartvatten',
-    'toatömning',
-    'wc-kassett',
+    'kassett', 'kassettömning', 'latrin', 'kemtoa', 'svartvatten', 'toatömning', 'wc-kassett',
   ].some((term) => text.includes(term));
 }
 
 function textSuggestsFreshwater(text) {
   return [
-    'dricksvatten',
-    'färskvatten',
-    'farskvatten',
-    'vatten',
-    'vattenpost',
-    'fyllning vatten',
+    'dricksvatten', 'färskvatten', 'farskvatten', 'vatten', 'vattenpost', 'fyllning vatten',
   ].some((term) => text.includes(term));
 }
 
@@ -233,6 +213,9 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow }) {
   const [topProposal, setTopProposal] = useState(null);
   const [latestEntry, setLatestEntry] = useState(null);
   const [pois, setPois] = useState([]);
+  
+  const [communityPois, setCommunityPois] = useState({ drafts: [], officials: [] });
+
   const [loading, setLoading] = useState(true);
   const [showFilterModal, setShowFilterModal] = useState(false);
 
@@ -241,6 +224,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow }) {
     graywater: true,
     blackwater: true,
     freshwater: true,
+    hidden_gems: true, 
   });
 
   const [weather, setWeather] = useState({
@@ -273,6 +257,15 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow }) {
 
       const { data: poiData } = await supabase.from('pois').select('*').limit(500);
       setPois(Array.isArray(poiData) ? poiData : []);
+
+      // HÄMTAR VÅRA STJÄRNOR FRÅN VYERNA
+      const { data: draftsData } = await supabase.from('v_poi_drafts').select('*');
+      const { data: officialData } = await supabase.from('v_official_pois').select('*');
+
+      setCommunityPois({ 
+        drafts: draftsData || [], 
+        officials: officialData || [] 
+      });
 
       const res = await fetch(
         'https://api.open-meteo.com/v1/forecast?latitude=59.61&longitude=16.54&current=temperature_2m,weather_code&daily=sunrise,sunset&timezone=auto'
@@ -351,6 +344,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow }) {
       graywater: true,
       blackwater: true,
       freshwater: true,
+      hidden_gems: true, 
     });
   };
 
@@ -360,6 +354,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow }) {
       graywater: false,
       blackwater: false,
       freshwater: false,
+      hidden_gems: false,
     });
   };
 
@@ -431,13 +426,11 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow }) {
             style={{ height: '100%', width: '100%', borderRadius: '22px' }}
             zoomControl={false}
           >
-            {/* ELLER för Satellitkarta (Hybrid) */}
-{/* För vanlig karta (Roadmap) */}
-<TileLayer 
-  url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
-  subdomains={['mt0','mt1','mt2','mt3']}
-  attribution="&copy; Google Maps"
-/>
+            <TileLayer 
+              url="https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
+              subdomains={['mt0','mt1','mt2','mt3']}
+              attribution="&copy; Google Maps"
+            />
 
             {filteredPois.map((poi) => (
               <Marker
@@ -487,6 +480,41 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow }) {
                 </Popup>
               </Marker>
             ))}
+
+            {activeFilters.hidden_gems && communityPois.officials.map((poi) => (
+              <Marker key={poi.id} position={[poi.lat, poi.lng]} icon={officialStarIcon}>
+                <Popup>
+                  <div style={{ minWidth: '160px', textAlign: 'center' }}>
+                    <Star size={24} fill="#FFD700" color="#B8860B" style={{ margin: '0 auto 5px auto' }} />
+                    <strong style={{ color: '#B8860B', fontSize: '15px', display: 'block' }}>
+                      {poi.name || 'Gömda Pärlan'}
+                    </strong>
+                    <span style={{ fontSize: '10px', color: '#667276', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Verifierad av Buddies
+                    </span>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+
+            {activeFilters.hidden_gems && communityPois.drafts.map((poi) => (
+              <Marker key={poi.id} position={[poi.lat, poi.lng]} icon={draftStarIcon}>
+                <Popup>
+                  <div style={{ minWidth: '150px', textAlign: 'center' }}>
+                    <Star size={20} fill="#EAE5DD" color="#A9B4B5" style={{ margin: '0 auto 5px auto' }} />
+                    <strong style={{ color: '#667276', fontSize: '13px', display: 'block' }}>
+                      Pärla under upptäckt
+                    </strong>
+                    <hr style={{ margin: '8px 0', borderTop: '1px dashed #D5D8D1' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', fontSize: '12px' }}>
+                      <span style={{ fontWeight: 'bold', color: '#2F5D3A' }}>{poi.star_count} / 3</span>
+                      <span>Stjärnor</span>
+                    </div>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+
           </MapContainer>
 
           <div
@@ -496,37 +524,41 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow }) {
               e.stopPropagation();
               setShowFilterModal(true);
             }}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
             role="button"
             tabIndex={0}
             aria-label="Öppna filter för POIs"
           >
-            <div style={legendItem}>
-              <span style={{ ...dot, backgroundColor: '#4D8A57' }}></span> Parkering / Sova
+            <div style={{ ...legendItem, color: activeFilters.parking ? '#334247' : '#A9B4B5' }}>
+              <span style={{ ...dot, backgroundColor: activeFilters.parking ? '#4D8A57' : '#D5D8D1' }}></span> Parkering / Sova
             </div>
-            <div style={legendItem}>
-              <span style={{ ...dot, backgroundColor: '#7E8A8A' }}></span> Gråvatten
+            
+            <div style={{ ...legendItem, color: activeFilters.graywater ? '#334247' : '#A9B4B5' }}>
+              <span style={{ ...dot, backgroundColor: activeFilters.graywater ? '#7E8A8A' : '#D5D8D1' }}></span> Gråvatten
             </div>
-            <div style={legendItem}>
-              <span style={{ ...dot, backgroundColor: '#36424A' }}></span> Svartvatten
+            
+            <div style={{ ...legendItem, color: activeFilters.blackwater ? '#334247' : '#A9B4B5' }}>
+              <span style={{ ...dot, backgroundColor: activeFilters.blackwater ? '#36424A' : '#D5D8D1' }}></span> Svartvatten
             </div>
-            <div style={legendItem}>
-              <span style={{ ...dot, backgroundColor: '#4D93C7' }}></span> Färskvatten
+            
+            <div style={{ ...legendItem, color: activeFilters.freshwater ? '#334247' : '#A9B4B5' }}>
+              <span style={{ ...dot, backgroundColor: activeFilters.freshwater ? '#4D93C7' : '#D5D8D1' }}></span> Färskvatten
+            </div>
+            
+            <div style={{
+              ...legendItem, 
+              color: activeFilters.hidden_gems ? '#B8860B' : '#A9B4B5', 
+              borderTop: '1px solid #E5DED2', 
+              paddingTop: '5px', 
+              marginTop: '2px'
+            }}>
+              <Star size={11} fill={activeFilters.hidden_gems ? "#FFD700" : "none"} color={activeFilters.hidden_gems ? "#B8860B" : "#A9B4B5"} /> Gömda Pärlor
             </div>
           </div>
-        </div>
-
+          </div>
+          
         <div style={summaryGridStyle}>
           <div style={smallSectionStyle} onClick={() => setActiveTab('convoy')}>
             <div style={sectionHeaderStyle}>
@@ -622,6 +654,15 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow }) {
               >
                 <span style={{ ...filterDotStyle, backgroundColor: '#4D93C7' }}></span>
                 Färskvatten
+              </button>
+
+              <button 
+                type="button" 
+                onClick={() => toggleFilter('hidden_gems')} 
+                style={{ ...filterOptionStyle, ...(activeFilters.hidden_gems ? filterOptionActiveStyle : {}) }}
+              >
+                <Star size={16} fill={activeFilters.hidden_gems ? "#FFD700" : "none"} color={activeFilters.hidden_gems ? "#B8860B" : "#8B9798"} />
+                Gömda Pärlor (Community)
               </button>
             </div>
 

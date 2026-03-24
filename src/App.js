@@ -10,12 +10,13 @@ import {
   Sun,
   MapPin,
   Camera,
-  Image as ImageIcon,
+  ImageIcon,
   X,
   Save,
   Check,
   Loader2,
   LocateFixed,
+  Star, 
 } from 'lucide-react';
 
 import DashboardView from './features/dashboard/DashboardView';
@@ -73,6 +74,11 @@ function App() {
 
   const [pickerTarget, setPickerTarget] = useState('composer');
 
+  // --- NYTT: ANVÄNDAR-STATE & ONBOARDING ---
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingName, setOnboardingName] = useState('');
+
   const watchIdRef = useRef(null);
   const stopTimerRef = useRef(null);
   const assistantHideTimerRef = useRef(null);
@@ -88,9 +94,35 @@ function App() {
     date: new Date().toISOString().slice(0, 10),
     image: null,
     existingImageUrl: '',
+    isGoldenStar: false, 
   };
 
   const [composerDraft, setComposerDraft] = useState(emptyComposer);
+
+  // --- NYTT: KOLLA EFTER SPARAD ANVÄNDARE VID START ---
+  useEffect(() => {
+    const savedProfile = localStorage.getItem('camperbuddy_profile');
+    if (savedProfile) {
+      setCurrentUser(JSON.parse(savedProfile));
+    } else {
+      setShowOnboarding(true); // Visa välkomstskärmen om ingen profil finns
+    }
+  }, []);
+
+  const saveUserProfile = () => {
+    if (!onboardingName.trim()) return;
+    
+    // Skapa ett unikt ID och spara namnet
+    const newProfile = {
+      id: 'buddy_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36),
+      name: onboardingName.trim()
+    };
+    
+    localStorage.setItem('camperbuddy_profile', JSON.stringify(newProfile));
+    setCurrentUser(newProfile);
+    setShowOnboarding(false);
+  };
+  // -----------------------------------------------------
 
   const resetComposer = () => {
     setComposerDraft({
@@ -326,6 +358,7 @@ function App() {
       ...draft,
       date: normalizeDateForInput(draft.date),
       existingImageUrl: draft.existingImageUrl || '',
+      isGoldenStar: draft.isGoldenStar || false, 
     });
     setComposerVisible(true);
   };
@@ -339,6 +372,7 @@ function App() {
       date: entry.date,
       image: null,
       existingImageUrl: entry.image_url || '',
+      isGoldenStar: entry.is_golden_star || false, 
     });
   };
 
@@ -416,12 +450,48 @@ function App() {
     e.target.value = '';
   };
 
+  const handleStarRating = async () => {
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject);
+      });
+      
+      const { latitude, longitude } = position.coords;
+      const userId = currentUser ? currentUser.id : "anonymous_buddy"; 
+
+      const { data, error } = await supabase.rpc('handle_star_click', {
+        user_id_val: userId,
+        lat: latitude,
+        lng: longitude
+      });
+
+      if (error) throw error;
+
+      // Hantera de olika svaren från databasen
+      if (data.status === 'already_official') {
+        console.log("Platsen är redan en guldstjärna!");
+        return true; // Returnera true så minnet kan sparas ändå
+      } else if (data.status === 'created' || data.status === 'updated') {
+        return true; 
+      } else {
+        return false; // Redan röstat
+      }
+    } catch (err) {
+      console.error("Fel vid stjärnmärkning:", err);
+      return false;
+    }
+  };
+
   const handleSaveComposer = async () => {
     if (composerDraft.title.trim() === '' || composerDraft.content.trim() === '') return;
 
     setComposerUploading(true);
 
     try {
+      if (composerDraft.isGoldenStar) {
+        await handleStarRating();
+      }
+
       let finalImageUrl = composerDraft.existingImageUrl || null;
 
       if (composerDraft.image) {
@@ -445,6 +515,7 @@ function App() {
         location: composerDraft.location || 'Okänd plats',
         date: composerDraft.date || new Date().toISOString().slice(0, 10),
         image_url: finalImageUrl,
+        is_golden_star: composerDraft.isGoldenStar, 
       };
 
       let error = null;
@@ -503,6 +574,35 @@ function App() {
 
   return (
     <div style={appShellStyle}>
+      {/* --- NYTT: VÄLKOMSTSKÄRM (ONBOARDING) --- */}
+      {showOnboarding && (
+        <div style={onboardingOverlayStyle}>
+          <div style={onboardingCardStyle}>
+            <CamperBuddyLogo />
+            <h2 style={assistantTitleStyle}>Välkommen!</h2>
+            <p style={assistantLeadStyle}>
+              Vad ska vi kalla dig? 
+              (Ditt namn, husbilens namn eller kanske husbilens regnummer?)
+            </p>
+            <input
+              type="text"
+              placeholder="T.ex. VagabondLasse"
+              value={onboardingName}
+              onChange={(e) => setOnboardingName(e.target.value)}
+              style={{...inputStyle, marginBottom: '24px', textAlign: 'center', fontSize: '18px'}}
+            />
+            <button
+              onClick={saveUserProfile}
+              style={{...primaryBtn, width: '100%', opacity: onboardingName.trim() ? 1 : 0.5}}
+              disabled={!onboardingName.trim()}
+            >
+              Starta resan 🏕️
+            </button>
+          </div>
+        </div>
+      )}
+      {/* ---------------------------------------- */}
+
       <GlobalHeader activeTab={activeTab} />
 
       <main style={mainContentStyle}>{renderContent()}</main>
@@ -683,6 +783,22 @@ function App() {
               )}
             </button>
 
+            <button
+              type="button"
+              onClick={() => setComposerDraft(prev => ({ ...prev, isGoldenStar: !prev.isGoldenStar }))}
+              style={{
+                ...locationBtnStyle,
+                backgroundColor: composerDraft.isGoldenStar ? '#FFD700' : '#FBFAF7',
+                borderColor: composerDraft.isGoldenStar ? '#E6C200' : '#ECE7DF',
+                color: composerDraft.isGoldenStar ? '#5C4D00' : '#667276',
+                marginBottom: '12px',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <Star size={18} fill={composerDraft.isGoldenStar ? "#5C4D00" : "none"} />
+              {composerDraft.isGoldenStar ? 'Markerad som Guldstjärna!' : 'Tipsa Buddies om denna plats?'}
+            </button>
+
             <input
               type="date"
               value={composerDraft.date}
@@ -782,10 +898,39 @@ function App() {
   );
 }
 
+// --- STYLES ---
 const appShellStyle = {
   backgroundColor: '#F5F2ED',
   minHeight: '100vh',
 };
+
+// NYTT: Styles för välkomstskärmen
+const onboardingOverlayStyle = {
+  position: 'fixed',
+  inset: 0,
+  backgroundColor: 'rgba(245, 242, 237, 0.98)',
+  backdropFilter: 'blur(10px)',
+  WebkitBackdropFilter: 'blur(10px)',
+  zIndex: 9999, // Täcker allt!
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '20px'
+};
+
+const onboardingCardStyle = {
+  backgroundColor: '#FAF9F6',
+  padding: '40px 30px',
+  borderRadius: '34px',
+  width: '100%',
+  maxWidth: '450px',
+  boxShadow: '0 24px 60px rgba(0,0,0,0.12)',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  textAlign: 'center'
+};
+// ------------------------------------
 
 const headerLogoImageStyle = {
   height: '64px',
@@ -821,47 +966,6 @@ const headerInnerStyle = {
   alignItems: 'center',
   justifyContent: 'space-between',
   gap: '14px',
-};
-
-const logoWrapStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '12px',
-  minWidth: 0,
-};
-
-const logoBadgeStyle = {
-  width: '52px',
-  height: '52px',
-  borderRadius: '18px',
-  display: 'grid',
-  placeItems: 'center',
-  background: '#ECE9E1',
-  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.75)',
-  flexShrink: 0,
-};
-
-const logoTextStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  lineHeight: 1,
-  minWidth: 0,
-};
-
-const logoCamperStyle = {
-  fontSize: '11px',
-  fontWeight: 700,
-  letterSpacing: '0.18em',
-  textTransform: 'uppercase',
-  color: '#7A9275',
-  marginBottom: '3px',
-};
-
-const logoBuddyStyle = {
-  fontSize: '24px',
-  fontWeight: 800,
-  letterSpacing: '0.03em',
-  color: '#2F5D3A',
 };
 
 const headerRightStyle = {
