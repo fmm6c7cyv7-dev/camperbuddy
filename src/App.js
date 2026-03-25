@@ -77,6 +77,10 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingName, setOnboardingName] = useState('');
+  
+  // Nya states för inloggningen
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState('');
 
   const watchIdRef = useRef(null);
   const stopTimerRef = useRef(null);
@@ -107,15 +111,62 @@ function App() {
     }
   }, []);
 
-  const saveUserProfile = () => {
-    if (!onboardingName.trim()) return;
-    const newProfile = {
-      id: 'buddy_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36),
-      name: onboardingName.trim()
-    };
-    localStorage.setItem('camperbuddy_profile', JSON.stringify(newProfile));
-    setCurrentUser(newProfile);
-    setShowOnboarding(false);
+  // --- NY INLOGGNINGSLOGIK MED SUPABASE ---
+  const saveUserProfile = async () => {
+    const cleanName = onboardingName.trim();
+    if (cleanName.length < 2) {
+      setLoginError("Namnet måste vara minst 2 tecken.");
+      return;
+    }
+
+    setIsLoggingIn(true);
+    setLoginError('');
+
+    try {
+      // 1. Kolla om namnet redan finns i databasen (case insensitive)
+      const { data: existingUser, error: searchError } = await supabase
+        .from('buddies')
+        .select('*')
+        .ilike('username', cleanName)
+        .single();
+
+      if (existingUser) {
+        // Användaren fanns! Vi loggar in.
+        const userProfile = { id: existingUser.id, name: existingUser.username };
+        localStorage.setItem('camperbuddy_profile', JSON.stringify(userProfile));
+        setCurrentUser(userProfile);
+        setShowOnboarding(false);
+      } else {
+        // Användaren fanns inte, vi skapar den.
+        const { data: newUser, error: insertError } = await supabase
+          .from('buddies')
+          .insert([{ username: cleanName }])
+          .select()
+          .single();
+
+        if (insertError) {
+          // Om unicitetsregeln i databasen kickar in (någon annan tog exakt samma namn precis nu)
+          if (insertError.code === '23505') {
+             setLoginError("Detta namn blev precis upptaget, testa ett annat!");
+          } else {
+             setLoginError("Något gick fel vid skapandet. Försök igen.");
+          }
+          setIsLoggingIn(false);
+          return;
+        }
+
+        // Ny användare skapad och redo!
+        const userProfile = { id: newUser.id, name: newUser.username };
+        localStorage.setItem('camperbuddy_profile', JSON.stringify(userProfile));
+        setCurrentUser(userProfile);
+        setShowOnboarding(false);
+      }
+    } catch (err) {
+      console.error(err);
+      setLoginError("Ett oväntat fel uppstod. Kontrollera din uppkoppling.");
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
   const resetComposer = () => {
@@ -384,11 +435,10 @@ function App() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'home': return <DashboardView setActiveTab={setActiveTab} onOpenLogbookPhotoFlow={openDashboardPhotoFlow} />;
-     case 'convoy':
-  return <ConvoyView currentUser={currentUser} />;
+      case 'home': return <DashboardView setActiveTab={setActiveTab} onOpenLogbookPhotoFlow={openDashboardPhotoFlow} currentUser={currentUser} />;
+      case 'convoy': return <ConvoyView currentUser={currentUser} />;
       case 'logbook': return <LogbookView onOpenComposer={openComposerFromLogbook} onEditEntry={openEditComposer} refreshKey={logbookRefreshKey} />;
-      default: return <DashboardView setActiveTab={setActiveTab} onOpenLogbookPhotoFlow={openDashboardPhotoFlow} />;
+      default: return <DashboardView setActiveTab={setActiveTab} onOpenLogbookPhotoFlow={openDashboardPhotoFlow} currentUser={currentUser} />;
     }
   };
 
@@ -419,9 +469,9 @@ function App() {
                 src="/icons/icon-512.png" 
                 alt="CamperBUDDY" 
                 style={{ 
-                  height: '180px', // Dubbelt så stor
+                  height: '180px', 
                   width: '180px', 
-                  borderRadius: '35px', // Matchar den större storleken
+                  borderRadius: '35px',
                   boxShadow: '0 8px 25px rgba(0,0,0,0.12)' 
                 }} 
               />
@@ -449,12 +499,19 @@ function App() {
                   padding: '16px',
                   fontSize: '1.1rem',
                   borderRadius: '12px',
-                  border: '2px solid #edf2f7',
+                  border: loginError ? '2px solid #E74C3C' : '2px solid #edf2f7',
                   textAlign: 'center',
-                  marginBottom: '20px',
+                  marginBottom: loginError ? '8px' : '20px',
                   outline: 'none'
                 }}
               />
+              
+              {/* Felmeddelande visas här om något går snett */}
+              {loginError && (
+                <p style={{ color: '#E74C3C', fontSize: '13px', fontWeight: 'bold', marginBottom: '15px' }}>
+                  {loginError}
+                </p>
+              )}
 
               <button
                 onClick={saveUserProfile}
@@ -466,14 +523,16 @@ function App() {
                   fontSize: '1.2rem',
                   fontWeight: '700',
                   boxShadow: '0 4px 15px rgba(139, 163, 147, 0.4)',
-                  opacity: onboardingName.trim() ? 1 : 0.6
+                  opacity: onboardingName.trim() && !isLoggingIn ? 1 : 0.6,
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: '10px'
                 }}
-                disabled={!onboardingName.trim()}
+                disabled={!onboardingName.trim() || isLoggingIn}
               >
-                Starta resan 🏕️
+                {isLoggingIn ? <Loader2 className="animate-spin" size={24} /> : "Starta resan 🏕️"}
               </button>
-              
-              {/* Bottentexten är nu borttagen */}
             </div>
           </div>
         </div>
@@ -593,7 +652,7 @@ const assistantTitleStyle = { margin: 0, color: '#2F5D3A', fontSize: '28px', fon
 const assistantLeadStyle = { margin: '28px 0 24px 0', color: '#657174', fontSize: '22px', lineHeight: 1.35 };
 const infoRowStyle = { display: 'flex', justifyContent: 'space-around', margin: '0 0 26px 0', padding: '24px 0', borderTop: '1px solid #E3E1DB', borderBottom: '1px solid #E3E1DB' };
 const iconBox = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: '#8B9798', fontSize: '16px', fontWeight: 500 };
-const primaryBtn = { flex: 2, backgroundColor: '#2F5D3A', color: 'white', border: 'none', padding: '24px 24px', borderRadius: '28px', fontWeight: 800, fontSize: '22px', cursor: 'pointer' };
+const primaryBtn = { backgroundColor: '#2F5D3A', color: 'white', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: 700, fontSize: '18px', cursor: 'pointer' };
 const secondaryBtn = { flex: 1, backgroundColor: '#EAE5DD', color: '#7C8A8D', border: 'none', borderRadius: '28px', fontWeight: 500, fontSize: '22px', cursor: 'pointer' };
 const modalOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(24, 29, 26, 0.56)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, padding: '20px' };
 const modalStyle = { backgroundColor: '#FAF9F6', padding: '26px', borderRadius: '28px', width: '100%', maxWidth: '430px', boxShadow: '0 24px 60px rgba(0,0,0,0.18)' };
