@@ -74,7 +74,6 @@ function App() {
 
   const [pickerTarget, setPickerTarget] = useState('composer');
 
-  // --- NYTT: ANVÄNDAR-STATE & ONBOARDING ---
   const [currentUser, setCurrentUser] = useState(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingName, setOnboardingName] = useState('');
@@ -99,30 +98,25 @@ function App() {
 
   const [composerDraft, setComposerDraft] = useState(emptyComposer);
 
-  // --- NYTT: KOLLA EFTER SPARAD ANVÄNDARE VID START ---
   useEffect(() => {
     const savedProfile = localStorage.getItem('camperbuddy_profile');
     if (savedProfile) {
       setCurrentUser(JSON.parse(savedProfile));
     } else {
-      setShowOnboarding(true); // Visa välkomstskärmen om ingen profil finns
+      setShowOnboarding(true);
     }
   }, []);
 
   const saveUserProfile = () => {
     if (!onboardingName.trim()) return;
-    
-    // Skapa ett unikt ID och spara namnet
     const newProfile = {
       id: 'buddy_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36),
       name: onboardingName.trim()
     };
-    
     localStorage.setItem('camperbuddy_profile', JSON.stringify(newProfile));
     setCurrentUser(newProfile);
     setShowOnboarding(false);
   };
-  // -----------------------------------------------------
 
   const resetComposer = () => {
     setComposerDraft({
@@ -133,91 +127,44 @@ function App() {
 
   const normalizeDateForInput = (value) => {
     if (!value) return new Date().toISOString().slice(0, 10);
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      return value;
-    }
-
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
     const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString().slice(0, 10);
-    }
-
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
     return new Date().toISOString().slice(0, 10);
   };
 
   const resolveCurrentPlace = async () => {
-    if (!navigator.geolocation) {
-      return 'Okänd plats';
-    }
-
+    if (!navigator.geolocation) return 'Okänd plats';
     const position = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-      });
+      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true });
     });
-
     const { latitude, longitude } = position.coords;
-
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`
-    );
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`);
     const data = await res.json();
     const addr = data?.address || {};
-
-    const place =
-      addr.amenity ||
-      addr.tourism ||
-      addr.shop ||
-      addr.neighborhood ||
-      addr.road ||
-      addr.suburb ||
-      addr.village ||
-      addr.town ||
-      addr.city ||
-      'Okänd plats';
-
-    setDetectedLocation(place);
-    return place;
+    return addr.amenity || addr.tourism || addr.shop || addr.neighborhood || addr.road || addr.suburb || addr.village || addr.town || addr.city || 'Okänd plats';
   };
 
   const getGpsLocation = async () => {
     try {
-      await resolveCurrentPlace();
+      const place = await resolveCurrentPlace();
+      setDetectedLocation(place);
     } catch (error) {
-      console.error('Fel vid positionshämtning:', error);
       setDetectedLocation('Okänd plats');
     }
   };
 
   const fillComposerWithCurrentLocation = async () => {
     setComposerLocating(true);
-
     try {
-      if (
-        detectedLocation &&
-        detectedLocation !== DEFAULT_LOCATION_TEXT &&
-        detectedLocation !== 'Okänd plats'
-      ) {
-        setComposerDraft((prev) => ({
-          ...prev,
-          location: detectedLocation,
-        }));
+      if (detectedLocation && detectedLocation !== DEFAULT_LOCATION_TEXT && detectedLocation !== 'Okänd plats') {
+        setComposerDraft((prev) => ({ ...prev, location: detectedLocation }));
         return;
       }
-
       const place = await resolveCurrentPlace();
-
-      setComposerDraft((prev) => ({
-        ...prev,
-        location: place,
-      }));
+      setComposerDraft((prev) => ({ ...prev, location: place }));
     } catch (error) {
-      console.error('Fel vid hämtning av plats till composer:', error);
-      setComposerDraft((prev) => ({
-        ...prev,
-        location: prev.location || 'Okänd plats',
-      }));
+      setComposerDraft((prev) => ({ ...prev, location: prev.location || 'Okänd plats' }));
     } finally {
       setComposerLocating(false);
     }
@@ -228,33 +175,20 @@ function App() {
       clearTimeout(assistantHideTimerRef.current);
       assistantHideTimerRef.current = null;
     }
-
     if (!assistantMounted) {
       setAssistantMounted(true);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => setAssistantVisible(true));
-      });
+      requestAnimationFrame(() => requestAnimationFrame(() => setAssistantVisible(true)));
     } else {
       setAssistantVisible(true);
     }
-
     getGpsLocation();
   };
 
   const closeAssistantModal = ({ dismissUntilMove = false } = {}) => {
     setAssistantVisible(false);
-
-    if (dismissUntilMove) {
-      setDismissedUntilMotion(true);
-    }
-
-    if (assistantHideTimerRef.current) {
-      clearTimeout(assistantHideTimerRef.current);
-    }
-
-    assistantHideTimerRef.current = setTimeout(() => {
-      setAssistantMounted(false);
-    }, ASSISTANT_ANIMATION_MS);
+    if (dismissUntilMove) setDismissedUntilMotion(true);
+    if (assistantHideTimerRef.current) clearTimeout(assistantHideTimerRef.current);
+    assistantHideTimerRef.current = setTimeout(() => setAssistantMounted(false), ASSISTANT_ANIMATION_MS);
   };
 
   const simulateStop = () => {
@@ -275,26 +209,14 @@ function App() {
       closeAssistantModal();
       return undefined;
     }
-
     if (!navigator.geolocation) return undefined;
-
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const rawSpeed = pos?.coords?.speed;
-
-        if (rawSpeed == null || !Number.isFinite(rawSpeed)) {
-          return;
-        }
-
+        if (rawSpeed == null || !Number.isFinite(rawSpeed)) return;
         const speedKmh = rawSpeed * 3.6;
-
         if (speedKmh <= STOP_THRESHOLD_KMH) {
-          if (
-            !assistantMounted &&
-            !assistantVisible &&
-            !dismissedUntilMotion &&
-            !stopTimerRef.current
-          ) {
+          if (!assistantMounted && !assistantVisible && !dismissedUntilMotion && !stopTimerRef.current) {
             stopTimerRef.current = setTimeout(() => {
               openAssistantModal();
               stopTimerRef.current = null;
@@ -305,52 +227,18 @@ function App() {
             clearTimeout(stopTimerRef.current);
             stopTimerRef.current = null;
           }
-
-          if (dismissedUntilMotion) {
-            setDismissedUntilMotion(false);
-          }
-
-          if (assistantMounted || assistantVisible) {
-            closeAssistantModal();
-          }
+          if (dismissedUntilMotion) setDismissedUntilMotion(false);
+          if (assistantMounted || assistantVisible) closeAssistantModal();
         }
       },
-      (error) => {
-        console.error('Fel i hastighetsbevakning:', error);
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 2000,
-        timeout: 10000,
-      }
+      (error) => console.error(error),
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
     );
-
     return () => {
-      if (watchIdRef.current != null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
-
-      if (stopTimerRef.current) {
-        clearTimeout(stopTimerRef.current);
-        stopTimerRef.current = null;
-      }
+      if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
+      if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
     };
   }, [activeTab, assistantMounted, assistantVisible, dismissedUntilMotion]);
-
-  useEffect(() => {
-    return () => {
-      if (assistantHideTimerRef.current) {
-        clearTimeout(assistantHideTimerRef.current);
-      }
-      if (stopTimerRef.current) {
-        clearTimeout(stopTimerRef.current);
-      }
-      if (watchIdRef.current != null && navigator.geolocation) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
-    };
-  }, []);
 
   const openComposer = (draft = {}) => {
     setComposerDraft({
@@ -378,19 +266,11 @@ function App() {
 
   const closeComposer = () => {
     setComposerVisible(false);
-    setTimeout(() => {
-      resetComposer();
-    }, 150);
+    setTimeout(() => resetComposer(), 150);
   };
 
   const handleAssistantToComposer = () => {
-    const cleanLocation =
-      detectedLocation &&
-      detectedLocation !== DEFAULT_LOCATION_TEXT &&
-      detectedLocation !== 'Okänd plats'
-        ? detectedLocation
-        : '';
-
+    const cleanLocation = detectedLocation && detectedLocation !== DEFAULT_LOCATION_TEXT && detectedLocation !== 'Okänd plats' ? detectedLocation : '';
     openComposer({
       title: cleanLocation ? `Stopp vid ${cleanLocation}` : '',
       location: cleanLocation,
@@ -399,7 +279,6 @@ function App() {
       image: null,
       existingImageUrl: '',
     });
-
     closeAssistantModal({ dismissUntilMove: true });
     setActiveTab('logbook');
   };
@@ -414,27 +293,17 @@ function App() {
     openComposer();
   };
 
-  const closeMediaPicker = () => {
-    setShowMediaPicker(false);
-  };
+  const closeMediaPicker = () => setShowMediaPicker(false);
 
   const handlePickedImage = (file) => {
     if (!file) return;
-
     if (pickerTarget === 'newComposerFromDashboard') {
       setShowMediaPicker(false);
       setActiveTab('logbook');
-      openComposer({
-        image: file,
-      });
+      openComposer({ image: file });
       return;
     }
-
-    setComposerDraft((prev) => ({
-      ...prev,
-      image: file,
-    }));
-
+    setComposerDraft((prev) => ({ ...prev, image: file }));
     setShowMediaPicker(false);
   };
 
@@ -455,60 +324,36 @@ function App() {
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject);
       });
-      
       const { latitude, longitude } = position.coords;
       const userId = currentUser ? currentUser.id : "anonymous_buddy"; 
-
       const { data, error } = await supabase.rpc('handle_star_click', {
         user_id_val: userId,
         lat: latitude,
         lng: longitude
       });
-
       if (error) throw error;
-
-      // Hantera de olika svaren från databasen
-      if (data.status === 'already_official') {
-        console.log("Platsen är redan en guldstjärna!");
-        return true; // Returnera true så minnet kan sparas ändå
-      } else if (data.status === 'created' || data.status === 'updated') {
-        return true; 
-      } else {
-        return false; // Redan röstat
-      }
+      return data.status === 'already_official' || data.status === 'created' || data.status === 'updated';
     } catch (err) {
-      console.error("Fel vid stjärnmärkning:", err);
       return false;
     }
   };
 
   const handleSaveComposer = async () => {
     if (composerDraft.title.trim() === '' || composerDraft.content.trim() === '') return;
-
     setComposerUploading(true);
-
     try {
-      if (composerDraft.isGoldenStar) {
-        await handleStarRating();
-      }
-
+      if (composerDraft.isGoldenStar) await handleStarRating();
       let finalImageUrl = composerDraft.existingImageUrl || null;
-
       if (composerDraft.image) {
         const file = composerDraft.image;
         const fileExt = file.name?.split('.').pop() || 'jpg';
         const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('logbook_images')
-          .upload(fileName, file);
-
+        const { error: uploadError } = await supabase.storage.from('logbook_images').upload(fileName, file);
         if (!uploadError) {
           const { data } = supabase.storage.from('logbook_images').getPublicUrl(fileName);
           finalImageUrl = data.publicUrl;
         }
       }
-
       const payload = {
         title: composerDraft.title,
         content: composerDraft.content,
@@ -517,27 +362,21 @@ function App() {
         image_url: finalImageUrl,
         is_golden_star: composerDraft.isGoldenStar, 
       };
-
       let error = null;
-
       if (composerDraft.id) {
-        const result = await supabase
-          .from('logbook')
-          .update(payload)
-          .eq('id', composerDraft.id);
+        const result = await supabase.from('logbook').update(payload).eq('id', composerDraft.id);
         error = result.error;
       } else {
         const result = await supabase.from('logbook').insert([payload]);
         error = result.error;
       }
-
       if (!error) {
         closeComposer();
         setActiveTab('logbook');
         setLogbookRefreshKey((prev) => prev + 1);
       }
     } catch (error) {
-      console.error('Fel vid sparning av minne:', error);
+      console.error(error);
     } finally {
       setComposerUploading(false);
     }
@@ -545,84 +384,108 @@ function App() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'home':
-        return (
-          <DashboardView
-            setActiveTab={setActiveTab}
-            onOpenLogbookPhotoFlow={openDashboardPhotoFlow}
-          />
-        );
-      case 'convoy':
-        return <ConvoyView />;
-      case 'logbook':
-        return (
-          <LogbookView
-            onOpenComposer={openComposerFromLogbook}
-            onEditEntry={openEditComposer}
-            refreshKey={logbookRefreshKey}
-          />
-        );
-      default:
-        return (
-          <DashboardView
-            setActiveTab={setActiveTab}
-            onOpenLogbookPhotoFlow={openDashboardPhotoFlow}
-          />
-        );
+      case 'home': return <DashboardView setActiveTab={setActiveTab} onOpenLogbookPhotoFlow={openDashboardPhotoFlow} />;
+     case 'convoy':
+  return <ConvoyView currentUser={currentUser} />;
+      case 'logbook': return <LogbookView onOpenComposer={openComposerFromLogbook} onEditEntry={openEditComposer} refreshKey={logbookRefreshKey} />;
+      default: return <DashboardView setActiveTab={setActiveTab} onOpenLogbookPhotoFlow={openDashboardPhotoFlow} />;
     }
   };
 
   return (
     <div style={appShellStyle}>
-      {/* --- NYTT: VÄLKOMSTSKÄRM (ONBOARDING) --- */}
+      {/* --- ONBOARDING (VÄLKOMSTSKÄRM) --- */}
       {showOnboarding && (
         <div style={onboardingOverlayStyle}>
-          <div style={onboardingCardStyle}>
-            <CamperBuddyLogo />
-            <h2 style={assistantTitleStyle}>Välkommen!</h2>
-            <p style={assistantLeadStyle}>
-              Vad ska vi kalla dig? 
-              (Ditt namn, husbilens namn eller kanske husbilens regnummer?)
-            </p>
-            <input
-              type="text"
-              placeholder="T.ex. VagabondLasse"
-              value={onboardingName}
-              onChange={(e) => setOnboardingName(e.target.value)}
-              style={{...inputStyle, marginBottom: '24px', textAlign: 'center', fontSize: '18px'}}
-            />
-            <button
-              onClick={saveUserProfile}
-              style={{...primaryBtn, width: '100%', opacity: onboardingName.trim() ? 1 : 0.5}}
-              disabled={!onboardingName.trim()}
-            >
-              Starta resan 🏕️
-            </button>
+          <div style={{
+            ...onboardingCardStyle,
+            padding: 0,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            width: '90%',
+            maxWidth: '400px'
+          }}>
+            {/* HEADER MED DUBBELT SÅ STOR LOGGA/IKON */}
+            <div style={{
+              backgroundColor: '#f8f9f8',
+              padding: '40px 20px',
+              borderBottom: '1px solid #e2e8f0',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center'
+            }}>
+              <img 
+                src="/icons/icon-512.png" 
+                alt="CamperBUDDY" 
+                style={{ 
+                  height: '180px', // Dubbelt så stor
+                  width: '180px', 
+                  borderRadius: '35px', // Matchar den större storleken
+                  boxShadow: '0 8px 25px rgba(0,0,0,0.12)' 
+                }} 
+              />
+            </div>
+
+            {/* NY FRÅGA OCH INPUT */}
+            <div style={{ padding: '30px 25px', textAlign: 'center' }}>
+              <div style={{ marginBottom: '30px' }}>
+                <p style={{ fontSize: '1.25rem', fontWeight: '700', color: '#334247', margin: '0' }}>
+                  Skriv ditt namn eller ett alias?
+                </p>
+                <p style={{ fontSize: '0.9rem', color: '#667085', marginTop: '12px', lineHeight: '1.4' }}>
+                  (Ditt riktiga namn, husbilens namn eller kanske<br/>husbilens regnummer?)
+                </p>
+              </div>
+
+              <input
+                type="text"
+                placeholder="T.ex. HusbilsLeffe"
+                value={onboardingName}
+                onChange={(e) => setOnboardingName(e.target.value)}
+                style={{
+                  ...inputStyle,
+                  width: '100%',
+                  padding: '16px',
+                  fontSize: '1.1rem',
+                  borderRadius: '12px',
+                  border: '2px solid #edf2f7',
+                  textAlign: 'center',
+                  marginBottom: '20px',
+                  outline: 'none'
+                }}
+              />
+
+              <button
+                onClick={saveUserProfile}
+                style={{
+                  ...primaryBtn,
+                  width: '100%',
+                  padding: '18px',
+                  borderRadius: '14px',
+                  fontSize: '1.2rem',
+                  fontWeight: '700',
+                  boxShadow: '0 4px 15px rgba(139, 163, 147, 0.4)',
+                  opacity: onboardingName.trim() ? 1 : 0.6
+                }}
+                disabled={!onboardingName.trim()}
+              >
+                Starta resan 🏕️
+              </button>
+              
+              {/* Bottentexten är nu borttagen */}
+            </div>
           </div>
         </div>
       )}
-      {/* ---------------------------------------- */}
 
+      {/* --- RESTEN AV APPEN --- */}
       <GlobalHeader activeTab={activeTab} />
 
       <main style={mainContentStyle}>{renderContent()}</main>
 
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={handleCameraChange}
-        style={{ display: 'none' }}
-      />
-
-      <input
-        ref={galleryInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleGalleryChange}
-        style={{ display: 'none' }}
-      />
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleCameraChange} style={{ display: 'none' }} />
+      <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleGalleryChange} style={{ display: 'none' }} />
 
       {activeTab === 'home' && (
         <button onClick={simulateStop} style={simulateStopBtnStyle}>
@@ -631,51 +494,18 @@ function App() {
       )}
 
       {assistantMounted && (
-        <div
-          style={{
-            ...assistantOverlayStyle,
-            opacity: assistantVisible ? 1 : 0,
-            pointerEvents: assistantVisible ? 'auto' : 'none',
-          }}
-        >
-          <div
-            style={{
-              ...bottomSheetStyle,
-              transform: assistantVisible ? 'translateY(0)' : 'translateY(150%)',
-              opacity: assistantVisible ? 1 : 0.98,
-            }}
-          >
+        <div style={{ ...assistantOverlayStyle, opacity: assistantVisible ? 1 : 0, pointerEvents: assistantVisible ? 'auto' : 'none' }}>
+          <div style={{ ...bottomSheetStyle, transform: assistantVisible ? 'translateY(0)' : 'translateY(150%)', opacity: assistantVisible ? 1 : 0.98 }}>
             <h2 style={assistantTitleStyle}>Härlig plats! 👋</h2>
-
-            <p style={assistantLeadStyle}>
-              Stannat vid <b>{detectedLocation}</b>?
-            </p>
-
+            <p style={assistantLeadStyle}>Stannat vid <b>{detectedLocation}</b>?</p>
             <div style={infoRowStyle}>
-              <div style={iconBox}>
-                <Eye size={22} color="#8B9798" />
-                <span>Utsikt</span>
-              </div>
-              <div style={iconBox}>
-                <Trees size={22} color="#8B9798" />
-                <span>Natur</span>
-              </div>
-              <div style={iconBox}>
-                <Sun size={22} color="#8B9798" />
-                <span>Solnedgång</span>
-              </div>
+              <div style={iconBox}><Eye size={22} color="#8B9798" /><span>Utsikt</span></div>
+              <div style={iconBox}><Trees size={22} color="#8B9798" /><span>Natur</span></div>
+              <div style={iconBox}><Sun size={22} color="#8B9798" /><span>Solnedgång</span></div>
             </div>
-
             <div style={{ display: 'flex', gap: '14px' }}>
-              <button style={primaryBtn} onClick={handleAssistantToComposer}>
-                Ja, spara 📸
-              </button>
-              <button
-                style={secondaryBtn}
-                onClick={() => closeAssistantModal({ dismissUntilMove: true })}
-              >
-                Nej tack
-              </button>
+              <button style={primaryBtn} onClick={handleAssistantToComposer}>Ja, spara 📸</button>
+              <button style={secondaryBtn} onClick={() => closeAssistantModal({ dismissUntilMove: true })}>Nej tack</button>
             </div>
           </div>
         </div>
@@ -683,109 +513,35 @@ function App() {
 
       {showMediaPicker && (
         <div style={modalOverlayStyle} onClick={closeMediaPicker}>
-          <div
-            style={actionSheetStyle}
-            className="animate-slide-up"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div style={actionSheetStyle} className="animate-slide-up" onClick={(e) => e.stopPropagation()}>
             <div style={sheetHandleStyle}></div>
-
             <div style={actionSheetHeaderStyle}>
               <h2 style={sheetTitleStyle}>Lägg till bild</h2>
-              <button onClick={closeMediaPicker} style={iconOnlyBtnStyle}>
-                <X />
-              </button>
+              <button onClick={closeMediaPicker} style={iconOnlyBtnStyle}><X /></button>
             </div>
-
-            <p style={actionSheetTextStyle}>
-              Välj hur du vill skapa ditt nya minne.
-            </p>
-
+            <p style={actionSheetTextStyle}>Välj hur du vill skapa ditt nya minne.</p>
             <div style={sheetActionGridStyle}>
-              <button
-                type="button"
-                onClick={() => cameraInputRef.current?.click()}
-                style={sheetActionBtnStyle}
-              >
-                <Camera size={22} />
-                <span>Öppna kamera</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => galleryInputRef.current?.click()}
-                style={sheetActionBtnStyle}
-              >
-                <ImageIcon size={22} />
-                <span>Välj från bibliotek</span>
-              </button>
+              <button type="button" onClick={() => cameraInputRef.current?.click()} style={sheetActionBtnStyle}><Camera size={22} /><span>Öppna kamera</span></button>
+              <button type="button" onClick={() => galleryInputRef.current?.click()} style={sheetActionBtnStyle}><ImageIcon size={22} /><span>Välj från bibliotek</span></button>
             </div>
-
-            <button type="button" onClick={closeMediaPicker} style={sheetCancelBtnStyle}>
-              Avbryt
-            </button>
+            <button type="button" onClick={closeMediaPicker} style={sheetCancelBtnStyle}>Avbryt</button>
           </div>
         </div>
       )}
 
       {composerVisible && (
         <div style={modalOverlayStyle} onClick={closeComposer}>
-          <div
-            style={modalStyle}
-            className="animate-slide-up"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div style={modalStyle} className="animate-slide-up" onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <h2 style={sheetTitleStyle}>
-                {composerDraft.id ? 'Redigera minne' : 'Skapa minne'}
-              </h2>
-              <button onClick={closeComposer} style={iconOnlyBtnStyle}>
-                <X />
-              </button>
+              <h2 style={sheetTitleStyle}>{composerDraft.id ? 'Redigera minne' : 'Skapa minne'}</h2>
+              <button onClick={closeComposer} style={iconOnlyBtnStyle}><X /></button>
             </div>
-
-            <input
-              type="text"
-              placeholder="Rubrik"
-              value={composerDraft.title}
-              onChange={(e) =>
-                setComposerDraft((prev) => ({ ...prev, title: e.target.value }))
-              }
-              style={inputStyle}
-            />
-
-            <input
-              type="text"
-              placeholder="Plats"
-              value={composerDraft.location}
-              onChange={(e) =>
-                setComposerDraft((prev) => ({ ...prev, location: e.target.value }))
-              }
-              style={inputStyle}
-            />
-
-            <button
-              type="button"
-              onClick={fillComposerWithCurrentLocation}
-              disabled={composerLocating}
-              style={locationBtnStyle}
-            >
-              {composerLocating ? (
-                <>
-                  <Loader2 className="animate-spin" size={16} />
-                  Hämtar position...
-                </>
-              ) : (
-                <>
-                  <LocateFixed size={16} />
-                  Använd min position
-                </>
-              )}
+            <input type="text" placeholder="Rubrik" value={composerDraft.title} onChange={(e) => setComposerDraft((prev) => ({ ...prev, title: e.target.value }))} style={inputStyle} />
+            <input type="text" placeholder="Plats" value={composerDraft.location} onChange={(e) => setComposerDraft((prev) => ({ ...prev, location: e.target.value }))} style={inputStyle} />
+            <button type="button" onClick={fillComposerWithCurrentLocation} disabled={composerLocating} style={locationBtnStyle}>
+              {composerLocating ? <><Loader2 className="animate-spin" size={16} />Hämtar position...</> : <><LocateFixed size={16} />Använd min position</>}
             </button>
-
-            <button
-              type="button"
-              onClick={() => setComposerDraft(prev => ({ ...prev, isGoldenStar: !prev.isGoldenStar }))}
+            <button type="button" onClick={() => setComposerDraft(prev => ({ ...prev, isGoldenStar: !prev.isGoldenStar }))}
               style={{
                 ...locationBtnStyle,
                 backgroundColor: composerDraft.isGoldenStar ? '#FFD700' : '#FBFAF7',
@@ -798,501 +554,65 @@ function App() {
               <Star size={18} fill={composerDraft.isGoldenStar ? "#5C4D00" : "none"} />
               {composerDraft.isGoldenStar ? 'Markerad som Guldstjärna!' : 'Tipsa Buddies om denna plats?'}
             </button>
-
-            <input
-              type="date"
-              value={composerDraft.date}
-              onChange={(e) =>
-                setComposerDraft((prev) => ({ ...prev, date: e.target.value }))
-              }
-              style={inputStyle}
-            />
-
-            <textarea
-              placeholder="Vad hände idag?"
-              value={composerDraft.content}
-              onChange={(e) =>
-                setComposerDraft((prev) => ({ ...prev, content: e.target.value }))
-              }
-              style={{ ...inputStyle, height: '96px', resize: 'none' }}
-            />
-
+            <input type="date" value={composerDraft.date} onChange={(e) => setComposerDraft((prev) => ({ ...prev, date: e.target.value }))} style={inputStyle} />
+            <textarea placeholder="Vad hände idag?" value={composerDraft.content} onChange={(e) => setComposerDraft((prev) => ({ ...prev, content: e.target.value }))} style={{ ...inputStyle, height: '96px', resize: 'none' }} />
             <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setPickerTarget('composer');
-                  cameraInputRef.current?.click();
-                }}
-                style={mediaBtnStyle}
-              >
-                <Camera size={20} />
-                Kamera
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setPickerTarget('composer');
-                  galleryInputRef.current?.click();
-                }}
-                style={mediaBtnStyle}
-              >
-                <ImageIcon size={20} />
-                Galleri
-              </button>
+              <button type="button" onClick={() => { setPickerTarget('composer'); cameraInputRef.current?.click(); }} style={mediaBtnStyle}><Camera size={20} />Kamera</button>
+              <button type="button" onClick={() => { setPickerTarget('composer'); galleryInputRef.current?.click(); }} style={mediaBtnStyle}><ImageIcon size={20} />Galleri</button>
             </div>
-
-            {composerDraft.image && (
-              <div style={selectedFileBadge}>
-                <Check size={16} />
-                Ny bild vald:{' '}
-                {composerDraft.image.name.length > 24
-                  ? `${composerDraft.image.name.slice(0, 24)}...`
-                  : composerDraft.image.name}
-              </div>
-            )}
-
-            {!composerDraft.image && composerDraft.existingImageUrl && (
-              <div style={selectedFileBadge}>
-                <Check size={16} />
-                Befintlig bild kommer att behållas
-              </div>
-            )}
-
-            <button
-              onClick={handleSaveComposer}
-              disabled={composerUploading}
-              style={saveBtnStyle}
-            >
-              {composerUploading ? (
-                <Loader2 className="animate-spin" />
-              ) : (
-                <>
-                  <Save size={20} />
-                  {composerDraft.id ? 'Spara ändringar' : 'Spara minne'}
-                </>
-              )}
-            </button>
+            {composerDraft.image && <div style={selectedFileBadge}><Check size={16} />Ny bild vald: {composerDraft.image.name.length > 24 ? `${composerDraft.image.name.slice(0, 24)}...` : composerDraft.image.name}</div>}
+            {!composerDraft.image && composerDraft.existingImageUrl && <div style={selectedFileBadge}><Check size={16} />Befintlig bild kommer att behållas</div>}
+            <button onClick={handleSaveComposer} disabled={composerUploading} style={saveBtnStyle}>{composerUploading ? <Loader2 className="animate-spin" /> : <><Save size={20} />{composerDraft.id ? 'Spara ändringar' : 'Spara minne'}</>}</button>
           </div>
         </div>
       )}
 
       <nav style={navStyle}>
-        <button onClick={() => setActiveTab('home')} style={navItem(activeTab === 'home')}>
-          <Compass />
-          <span>Hem</span>
-        </button>
-
-        <button onClick={() => setActiveTab('convoy')} style={navItem(activeTab === 'convoy')}>
-          <Users />
-          <span>Konvoj</span>
-        </button>
-
-        <button onClick={() => setActiveTab('logbook')} style={navItem(activeTab === 'logbook')}>
-          <BookOpen />
-          <span>Logg</span>
-        </button>
+        <button onClick={() => setActiveTab('home')} style={navItem(activeTab === 'home')}><Compass /><span>Hem</span></button>
+        <button onClick={() => setActiveTab('convoy')} style={navItem(activeTab === 'convoy')}><Users /><span>Konvoj</span></button>
+        <button onClick={() => setActiveTab('logbook')} style={navItem(activeTab === 'logbook')}><BookOpen /><span>Logg</span></button>
       </nav>
     </div>
   );
 }
 
 // --- STYLES ---
-const appShellStyle = {
-  backgroundColor: '#F5F2ED',
-  minHeight: '100vh',
-};
-
-// NYTT: Styles för välkomstskärmen
-const onboardingOverlayStyle = {
-  position: 'fixed',
-  inset: 0,
-  backgroundColor: 'rgba(245, 242, 237, 0.98)',
-  backdropFilter: 'blur(10px)',
-  WebkitBackdropFilter: 'blur(10px)',
-  zIndex: 9999, // Täcker allt!
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '20px'
-};
-
-const onboardingCardStyle = {
-  backgroundColor: '#FAF9F6',
-  padding: '40px 30px',
-  borderRadius: '34px',
-  width: '100%',
-  maxWidth: '450px',
-  boxShadow: '0 24px 60px rgba(0,0,0,0.12)',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  textAlign: 'center'
-};
-// ------------------------------------
-
-const headerLogoImageStyle = {
-  height: '64px',
-  width: 'auto',
-  display: 'block',
-  objectFit: 'contain',
-};
-
-const mainContentStyle = {
-  paddingTop: '90px',
-  paddingBottom: '96px',
-};
-
-const headerShellStyle = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  zIndex: 4000,
-  backgroundColor: 'rgba(248,247,243,0.95)',
-  backdropFilter: 'blur(12px)',
-  WebkitBackdropFilter: 'blur(12px)',
-  boxShadow: '0 1px 0 rgba(47,93,58,0.04)',
-};
-
-const headerInnerStyle = {
-  width: '100%',
-  maxWidth: '1180px',
-  margin: '0 auto',
-  minHeight: '74px',
-  padding: '12px 18px',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: '14px',
-};
-
-const headerRightStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '10px',
-  flexShrink: 0,
-};
-
-const headerPillStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  padding: '10px 14px',
-  borderRadius: '999px',
-  background: '#ECE9E1',
-  color: '#2F5D3A',
-  fontSize: '13px',
-  fontWeight: 700,
-  border: '1px solid rgba(47,93,58,0.06)',
-};
-
-const simulateStopBtnStyle = {
-  position: 'fixed',
-  left: '50%',
-  bottom: '116px',
-  transform: 'translateX(-50%)',
-  backgroundColor: 'rgba(47, 93, 58, 0.12)',
-  color: 'rgba(47, 93, 58, 0.82)',
-  border: '1px solid rgba(47, 93, 58, 0.18)',
-  padding: '10px 18px',
-  borderRadius: '999px',
-  fontSize: '12px',
-  fontWeight: 700,
-  letterSpacing: '0.01em',
-  backdropFilter: 'blur(8px)',
-  WebkitBackdropFilter: 'blur(8px)',
-  boxShadow: '0 8px 20px rgba(0,0,0,0.05)',
-  zIndex: 1700,
-  cursor: 'pointer',
-};
-
-const assistantOverlayStyle = {
-  position: 'fixed',
-  inset: 0,
-  backgroundColor: 'rgba(17, 22, 19, 0.68)',
-  display: 'flex',
-  flexDirection: 'column',
-  justifyContent: 'flex-end',
-  alignItems: 'center',
-  zIndex: 5000,
-  padding: '20px 20px calc(96px + env(safe-area-inset-bottom)) 20px',
-  transition: `opacity ${ASSISTANT_ANIMATION_MS}ms ease-in-out`,
-};
-
-const bottomSheetStyle = {
-  backgroundColor: '#FAF9F6',
-  padding: '34px 32px 28px 32px',
-  borderRadius: '34px',
-  width: '100%',
-  maxWidth: '850px',
-  boxShadow: '0 24px 60px rgba(0,0,0,0.18)',
-  transition: `transform ${ASSISTANT_ANIMATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${ASSISTANT_ANIMATION_MS}ms ease-in-out`,
-};
-
-const assistantTitleStyle = {
-  margin: 0,
-  color: '#2F5D3A',
-  fontSize: '28px',
-  fontWeight: 800,
-  lineHeight: 1.1,
-};
-
-const assistantLeadStyle = {
-  margin: '28px 0 24px 0',
-  color: '#657174',
-  fontSize: '22px',
-  lineHeight: 1.35,
-};
-
-const infoRowStyle = {
-  display: 'flex',
-  justifyContent: 'space-around',
-  margin: '0 0 26px 0',
-  padding: '24px 0',
-  borderTop: '1px solid #E3E1DB',
-  borderBottom: '1px solid #E3E1DB',
-};
-
-const iconBox = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: '10px',
-  color: '#8B9798',
-  fontSize: '16px',
-  fontWeight: 500,
-};
-
-const primaryBtn = {
-  flex: 2,
-  backgroundColor: '#2F5D3A',
-  color: 'white',
-  border: 'none',
-  padding: '24px 24px',
-  borderRadius: '28px',
-  fontWeight: 800,
-  fontSize: '22px',
-  cursor: 'pointer',
-};
-
-const secondaryBtn = {
-  flex: 1,
-  backgroundColor: '#EAE5DD',
-  color: '#7C8A8D',
-  border: 'none',
-  borderRadius: '28px',
-  fontWeight: 500,
-  fontSize: '22px',
-  cursor: 'pointer',
-};
-
-const modalOverlayStyle = {
-  position: 'fixed',
-  inset: 0,
-  backgroundColor: 'rgba(24, 29, 26, 0.56)',
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'center',
-  zIndex: 5000,
-  padding: '20px',
-};
-
-const modalStyle = {
-  backgroundColor: '#FAF9F6',
-  padding: '26px',
-  borderRadius: '28px',
-  width: '100%',
-  maxWidth: '430px',
-  boxShadow: '0 24px 60px rgba(0,0,0,0.18)',
-};
-
-const modalHeaderStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: '20px',
-};
-
-const sheetTitleStyle = {
-  margin: 0,
-  color: '#2F5D3A',
-  fontSize: '18px',
-  fontWeight: 800,
-};
-
-const iconOnlyBtnStyle = {
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  color: '#172026',
-};
-
-const inputStyle = {
-  width: '100%',
-  padding: '14px 14px',
-  borderRadius: '14px',
-  border: '2px solid #ECE7DF',
-  marginBottom: '12px',
-  fontSize: '16px',
-  boxSizing: 'border-box',
-  backgroundColor: '#FBFAF7',
-  color: '#172026',
-};
-
-const locationBtnStyle = {
-  width: '100%',
-  marginTop: '-2px',
-  marginBottom: '12px',
-  padding: '12px 14px',
-  borderRadius: '14px',
-  border: '1px solid #DCE5DA',
-  backgroundColor: '#EEF3EA',
-  color: '#2F5D3A',
-  fontSize: '14px',
-  fontWeight: 700,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '8px',
-  cursor: 'pointer',
-};
-
-const mediaBtnStyle = {
-  flex: 1,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '8px',
-  padding: '13px',
-  backgroundColor: '#ECE9E1',
-  borderRadius: '14px',
-  cursor: 'pointer',
-  color: '#667276',
-  fontWeight: 'bold',
-  border: '1px solid #DDD7CC',
-};
-
-const selectedFileBadge = {
-  backgroundColor: '#E7EFE3',
-  color: '#2F5D3A',
-  padding: '10px 12px',
-  borderRadius: '12px',
-  fontSize: '12px',
-  marginBottom: '15px',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  fontWeight: 'bold',
-};
-
-const saveBtnStyle = {
-  width: '100%',
-  padding: '16px',
-  backgroundColor: '#2F5D3A',
-  color: 'white',
-  border: 'none',
-  borderRadius: '18px',
-  fontWeight: 'bold',
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'center',
-  gap: '10px',
-  cursor: 'pointer',
-};
-
-const actionSheetStyle = {
-  width: '100%',
-  maxWidth: '430px',
-  backgroundColor: '#FAF9F6',
-  borderRadius: '28px',
-  padding: '14px 18px 18px 18px',
-  boxShadow: '0 24px 60px rgba(0,0,0,0.18)',
-};
-
-const sheetHandleStyle = {
-  width: '48px',
-  height: '5px',
-  borderRadius: '999px',
-  backgroundColor: '#D9DDD6',
-  margin: '0 auto 16px auto',
-};
-
-const actionSheetHeaderStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: '8px',
-};
-
-const actionSheetTextStyle = {
-  margin: '0 0 16px 0',
-  color: '#667276',
-  fontSize: '14px',
-  lineHeight: '1.5',
-};
-
-const sheetActionGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: '1fr',
-  gap: '10px',
-  marginBottom: '14px',
-};
-
-const sheetActionBtnStyle = {
-  width: '100%',
-  border: '1px solid #DDD7CC',
-  backgroundColor: '#ECE9E1',
-  color: '#2F5D3A',
-  borderRadius: '16px',
-  padding: '16px',
-  fontWeight: 'bold',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '10px',
-  cursor: 'pointer',
-};
-
-const sheetCancelBtnStyle = {
-  width: '100%',
-  border: 'none',
-  backgroundColor: '#1C2730',
-  color: '#FFF',
-  borderRadius: '16px',
-  padding: '15px',
-  fontWeight: 'bold',
-  cursor: 'pointer',
-};
-
-const navStyle = {
-  position: 'fixed',
-  bottom: 0,
-  left: 0,
-  right: 0,
-  backgroundColor: 'rgba(248,247,243,0.95)',
-  backdropFilter: 'blur(12px)',
-  WebkitBackdropFilter: 'blur(12px)',
-  display: 'flex',
-  justifyContent: 'space-around',
-  padding: '10px 0 calc(20px + env(safe-area-inset-bottom)) 0',
-  boxShadow: '0 -2px 10px rgba(0,0,0,0.05)',
-  zIndex: 1900,
-};
-
-const navItem = (active) => ({
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  background: 'none',
-  border: 'none',
-  color: active ? '#2F5D3A' : '#95A5A6',
-  fontSize: '10px',
-  fontWeight: active ? 700 : 500,
-});
+const appShellStyle = { backgroundColor: '#F5F2ED', minHeight: '100vh' };
+const onboardingOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(245, 242, 237, 0.98)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' };
+const onboardingCardStyle = { backgroundColor: '#FAF9F6', borderRadius: '34px', width: '100%', maxWidth: '450px', boxShadow: '0 24px 60px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column' };
+const headerLogoImageStyle = { height: '64px', width: 'auto', display: 'block', objectFit: 'contain' };
+const mainContentStyle = { paddingTop: '90px', paddingBottom: '96px' };
+const headerShellStyle = { position: 'fixed', top: 0, left: 0, right: 0, zIndex: 4000, backgroundColor: 'rgba(248,247,243,0.95)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', boxShadow: '0 1px 0 rgba(47,93,58,0.04)' };
+const headerInnerStyle = { width: '100%', maxWidth: '1180px', margin: '0 auto', minHeight: '74px', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px' };
+const headerRightStyle = { display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 };
+const headerPillStyle = { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderRadius: '999px', background: '#ECE9E1', color: '#2F5D3A', fontSize: '13px', fontWeight: 700, border: '1px solid rgba(47,93,58,0.06)' };
+const simulateStopBtnStyle = { position: 'fixed', left: '50%', bottom: '116px', transform: 'translateX(-50%)', backgroundColor: 'rgba(47, 93, 58, 0.12)', color: 'rgba(47, 93, 58, 0.82)', border: '1px solid rgba(47, 93, 58, 0.18)', padding: '10px 18px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, letterSpacing: '0.01em', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', boxShadow: '0 8px 20px rgba(0,0,0,0.05)', zIndex: 1700, cursor: 'pointer' };
+const assistantOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 22, 19, 0.68)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', zIndex: 5000, padding: '20px 20px calc(96px + env(safe-area-inset-bottom)) 20px', transition: `opacity ${ASSISTANT_ANIMATION_MS}ms ease-in-out` };
+const bottomSheetStyle = { backgroundColor: '#FAF9F6', padding: '34px 32px 28px 32px', borderRadius: '34px', width: '100%', maxWidth: '850px', boxShadow: '0 24px 60px rgba(0,0,0,0.18)', transition: `transform ${ASSISTANT_ANIMATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${ASSISTANT_ANIMATION_MS}ms ease-in-out` };
+const assistantTitleStyle = { margin: 0, color: '#2F5D3A', fontSize: '28px', fontWeight: 800, lineHeight: 1.1 };
+const assistantLeadStyle = { margin: '28px 0 24px 0', color: '#657174', fontSize: '22px', lineHeight: 1.35 };
+const infoRowStyle = { display: 'flex', justifyContent: 'space-around', margin: '0 0 26px 0', padding: '24px 0', borderTop: '1px solid #E3E1DB', borderBottom: '1px solid #E3E1DB' };
+const iconBox = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: '#8B9798', fontSize: '16px', fontWeight: 500 };
+const primaryBtn = { flex: 2, backgroundColor: '#2F5D3A', color: 'white', border: 'none', padding: '24px 24px', borderRadius: '28px', fontWeight: 800, fontSize: '22px', cursor: 'pointer' };
+const secondaryBtn = { flex: 1, backgroundColor: '#EAE5DD', color: '#7C8A8D', border: 'none', borderRadius: '28px', fontWeight: 500, fontSize: '22px', cursor: 'pointer' };
+const modalOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(24, 29, 26, 0.56)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, padding: '20px' };
+const modalStyle = { backgroundColor: '#FAF9F6', padding: '26px', borderRadius: '28px', width: '100%', maxWidth: '430px', boxShadow: '0 24px 60px rgba(0,0,0,0.18)' };
+const modalHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' };
+const sheetTitleStyle = { margin: 0, color: '#2F5D3A', fontSize: '18px', fontWeight: 800 };
+const iconOnlyBtnStyle = { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#172026' };
+const inputStyle = { width: '100%', padding: '14px 14px', borderRadius: '14px', border: '2px solid #ECE7DF', marginBottom: '12px', fontSize: '16px', boxSizing: 'border-box', backgroundColor: '#FBFAF7', color: '#172026' };
+const locationBtnStyle = { width: '100%', marginTop: '-2px', marginBottom: '12px', padding: '12px 14px', borderRadius: '14px', border: '1px solid #DCE5DA', backgroundColor: '#EEF3EA', color: '#2F5D3A', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' };
+const mediaBtnStyle = { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '13px', backgroundColor: '#ECE9E1', borderRadius: '14px', cursor: 'pointer', color: '#667276', fontWeight: 'bold', border: '1px solid #DDD7CC' };
+const selectedFileBadge = { backgroundColor: '#E7EFE3', color: '#2F5D3A', padding: '10px 12px', borderRadius: '12px', fontSize: '12px', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' };
+const saveBtnStyle = { width: '100%', padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '18px', fontWeight: 'bold', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', cursor: 'pointer' };
+const actionSheetStyle = { width: '100%', maxWidth: '430px', backgroundColor: '#FAF9F6', borderRadius: '28px', padding: '14px 18px 18px 18px', boxShadow: '0 24px 60px rgba(0,0,0,0.18)' };
+const sheetHandleStyle = { width: '48px', height: '5px', borderRadius: '999px', backgroundColor: '#D9DDD6', margin: '0 auto 16px auto' };
+const actionSheetHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' };
+const actionSheetTextStyle = { margin: '0 0 16px 0', color: '#667276', fontSize: '14px', lineHeight: '1.5' };
+const sheetActionGridStyle = { display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginBottom: '14px' };
+const sheetActionBtnStyle = { width: '100%', border: '1px solid #DDD7CC', backgroundColor: '#ECE9E1', color: '#2F5D3A', borderRadius: '16px', padding: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer' };
+const sheetCancelBtnStyle = { width: '100%', border: 'none', backgroundColor: '#1C2730', color: '#FFF', borderRadius: '16px', padding: '15px', fontWeight: 'bold', cursor: 'pointer' };
+const navStyle = { position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(248,247,243,0.95)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', justifyContent: 'space-around', padding: '10px 0 calc(20px + env(safe-area-inset-bottom)) 0', boxShadow: '0 -2px 10px rgba(0,0,0,0.05)', zIndex: 1900 };
+const navItem = (active) => ({ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'none', border: 'none', color: active ? '#2F5D3A' : '#95A5A6', fontSize: '10px', fontWeight: active ? 700 : 500 });
 
 export default App;
