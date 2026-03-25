@@ -1,23 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import {
-  Trophy,
-  Clock,
-  Camera,
-  Navigation,
-  Map as MapIcon,
-  Sun,
-  Sunrise,
-  Sunset,
-  Cloud,
-  Star,
-  ExternalLink,
-  X,
-  Save,
-  Loader2,
-  Plus,
-  MapPin,
-  Check,
+  Trophy, Clock, Camera, Navigation, Map as MapIcon, Sun, Sunrise, Sunset, Cloud, Star,
+  X, Save, Loader2, Plus, MapPin, Check
 } from 'lucide-react';
 
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
@@ -32,42 +17,32 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// --- KOMPONENTER FÖR KART-INTERAKTION ---
 function MapEvents({ onMapClick }) {
-  useMapEvents({
-    click(e) {
-      onMapClick(e.latlng);
-    },
-  });
+  useMapEvents({ click(e) { onMapClick(e.latlng); } });
   return null;
 }
 
 function ChangeView({ center }) {
   const map = useMap();
-  useEffect(() => {
-    if (center && center[0] && center[1]) map.setView(center, 13);
-  }, [center, map]);
+  useEffect(() => { if (center && center[0] && center[1]) map.setView(center, 13); }, [center, map]);
   return null;
 }
 
-const createPoiIcon = (color) =>
-  new L.Icon({
-    iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
-  });
+const createPoiIcon = (color) => new L.Icon({
+  iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
+});
 
 const redIcon = createPoiIcon('red');
 
+// Färgmappning för kart-ikoner
 const singleServiceIcons = {
   parking: createPoiIcon('green'),
+  freshwater: createPoiIcon('blue'),
   graywater: createPoiIcon('grey'),
   blackwater: createPoiIcon('black'),
-  freshwater: createPoiIcon('blue'),
-  electricity: createPoiIcon('gold'), // Guld/Gul för El
+  electricity: createPoiIcon('gold'),
   default: createPoiIcon('gold'),
 };
 
@@ -77,108 +52,63 @@ const officialStarIcon = L.divIcon({
              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
            </svg>
          </div>`,
-  className: '',
-  iconSize: [32, 32],
-  iconAnchor: [16, 32],
-  popupAnchor: [0, -32],
+  className: '', iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -32],
 });
 
-const SERVICE_META = {
+const SERVICE_META_ALL = {
+  parking: { label: 'Ställplats', color: '#4D8A57' },
+  camp_site: { label: 'Camping', color: '#8D6E63' },
+  rest_area: { label: 'Rastplats', color: '#7CB342' },
+  freshwater: { label: 'Färskvatten', color: '#4D93C7' },
+  graywater: { label: 'Gråvatten', color: '#7E8A8A' },
+  blackwater: { label: 'Svartvatten', color: '#36424A' },
+  electricity: { label: 'El', color: '#D4A017' },
+  propane: { label: 'Gasol', color: '#E64A19' },
+  marina: { label: 'Gästhamn', color: '#1976D2' },
+  swimming: { label: 'Badplats', color: '#00BCD4' },
+  viewpoint: { label: 'Utsikt', color: '#9C27B0' },
+};
+
+const QUICK_FILTERS = {
   parking: { label: 'Parkering / Ställplats', color: '#4D8A57' },
   graywater: { label: 'Gråvatten', color: '#7E8A8A' },
   blackwater: { label: 'Svartvatten', color: '#36424A' },
   freshwater: { label: 'Färskvatten', color: '#4D93C7' },
-  electricity: { label: 'El finns', color: '#D4A017' }, // Ny kategori
+  electricity: { label: 'El finns', color: '#D4A017' },
 };
 
 function normalizePoiCategory(rawCategory) {
-  const category = String(rawCategory || 'default').trim().toLowerCase();
-  const categoryMap = {
-    parking: 'parking', parkering: 'parking', ställplats: 'parking', stallplats: 'parking', overnight: 'parking',
-    graywater: 'graywater', gråvatten: 'graywater', markbrunn: 'graywater',
-    blackwater: 'blackwater', svartvatten: 'blackwater', latrin: 'blackwater', kassett: 'blackwater',
-    freshwater: 'freshwater', dricksvatten: 'freshwater', vatten: 'freshwater',
-    electricity: 'electricity', el: 'electricity', power: 'electricity'
-  };
-  return categoryMap[category] || category;
+  const cat = String(rawCategory || 'default').trim().toLowerCase();
+  if (['parking', 'parkering', 'ställplats', 'stallplats', 'overnight'].includes(cat)) return 'parking';
+  if (['camp_site', 'camping'].includes(cat)) return 'camp_site';
+  if (['rest_area', 'rastplats'].includes(cat)) return 'rest_area';
+  return cat;
 }
 
 function buildMultiServiceIcon(serviceKeys) {
-  const dots = serviceKeys
-    .map(
-      (key) => `
-        <span
-          style="
-            width: 9px;
-            height: 9px;
-            border-radius: 50%;
-            background: ${SERVICE_META[key]?.color || '#D3B98A'};
-            border: 1px solid rgba(255,255,255,0.9);
-            box-sizing: border-box;
-            display: inline-block;
-          "
-        ></span>
-      `
-    )
-    .join('');
-
-  const html = `
-    <div style="position: relative; width: 34px; height: 44px;">
-      <div
-        style="
-          position: absolute;
-          top: 0;
-          left: 1px;
-          width: 32px;
-          height: 32px;
-          border-radius: 50% 50% 50% 12%;
-          transform: rotate(-45deg);
-          background: #ffffff;
-          border: 2px solid #47525d;
-          box-shadow: 0 3px 8px rgba(0,0,0,0.28);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          overflow: hidden;
-        "
-      >
-        <div
-          style="
-            transform: rotate(45deg);
-            display: flex;
-            flex-wrap: wrap;
-            gap: 2px;
-            align-items: center;
-            justify-content: center;
-            max-width: 18px;
-          "
-        >
-          ${dots}
-        </div>
-      </div>
-    </div>
-  `;
-
+  const dots = serviceKeys.filter(key => QUICK_FILTERS[key]).map(key => `<span style="width: 9px; height: 9px; border-radius: 50%; background: ${QUICK_FILTERS[key]?.color || '#D3B98A'}; border: 1px solid rgba(255,255,255,0.9); display: inline-block;"></span>`).join('');
+  const html = `<div style="position: relative; width: 34px; height: 44px;"><div style="position: absolute; top: 0; left: 1px; width: 32px; height: 32px; border-radius: 50% 50% 50% 12%; transform: rotate(-45deg); background: #ffffff; border: 2px solid #47525d; box-shadow: 0 3px 8px rgba(0,0,0,0.28); display: flex; align-items: center; justify-content: center; overflow: hidden;"><div style="transform: rotate(45deg); display: flex; flex-wrap: wrap; gap: 2px; align-items: center; justify-content: center; max-width: 18px;">${dots}</div></div></div>`;
   return L.divIcon({ html, className: '', iconSize: [34, 44], iconAnchor: [17, 42], popupAnchor: [0, -36] });
 }
 
 function buildTextBlob(poi) {
-  return [poi?.name || '', poi?.category || '', poi?.address || '', poi?.description || '']
-    .join(' | ')
-    .toLowerCase();
+  return [poi?.name || '', poi?.category || '', poi?.address || '', poi?.description || ''].join(' | ').toLowerCase();
 }
 
 function getPoiServiceFlags(poi, normalizedCategory) {
   const text = buildTextBlob(poi);
   const check = (terms) => terms.some((term) => text.includes(term));
   return {
-    parking: poi?.has_parking === true || normalizedCategory === 'parking' || check(['ställplats', 'stallplats', 'parkering', 'husbilsplats']),
-    graywater: poi?.has_graywater === true || normalizedCategory === 'graywater' || check(['markbrunn', 'gråvatten', 'gråvattentömning']),
-    blackwater: poi?.has_blackwater === true || normalizedCategory === 'blackwater' || check(['kassett', 'latrin', 'svartvatten', 'toatömning']),
-    freshwater: poi?.has_freshwater === true || normalizedCategory === 'freshwater' || check(['färskvatten', 'dricksvatten', 'vattenpost']),
-    electricity: poi?.has_electricity === true || normalizedCategory === 'electricity' || check([' el ', ' elanslutning', 'ström']),
+    parking: poi?.has_parking === true || normalizedCategory === 'parking' || check(['ställplats', 'parkering']),
+    graywater: poi?.has_graywater === true || normalizedCategory === 'graywater' || check(['gråvatten']),
+    blackwater: poi?.has_blackwater === true || normalizedCategory === 'blackwater' || check(['svartvatten', 'latrin', 'kassett']),
+    freshwater: poi?.has_freshwater === true || normalizedCategory === 'freshwater' || check(['färskvatten', 'dricksvatten']),
+    electricity: poi?.has_electricity === true || normalizedCategory === 'electricity' || check([' el ', 'ström']),
   };
 }
+
+const ALL_FILTERS_TRUE = { parking: true, graywater: true, blackwater: true, freshwater: true, electricity: true, hidden_gems: true };
+const ALL_SERVICES_FALSE = Object.keys(SERVICE_META_ALL).reduce((acc, key) => ({ ...acc, [key]: false }), {});
 
 function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   const [topProposal, setTopProposal] = useState(null);
@@ -186,41 +116,27 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   const [pois, setPois] = useState([]);
   const [communityPois, setCommunityPois] = useState({ drafts: [], officials: [] });
   const [loading, setLoading] = useState(true);
-  const [showFilterModal, setShowFilterModal] = useState(false);
+  
+  const [filterModalRendered, setFilterModalRendered] = useState(false);
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [showNavModal, setShowNavModal] = useState(false);
   const [selectedPoiForNav, setSelectedPoiForNav] = useState(null);
 
-  // States för ny POI - NU MED MULTI-VAL
   const [tempMarker, setTempMarker] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newPoi, setNewPoi] = useState({ 
-    name: '', 
-    services: { parking: false, graywater: false, blackwater: false, freshwater: false, electricity: false }, 
-    lat: null, 
-    lng: null 
-  });
+  
+  const [newPoi, setNewPoi] = useState({ name: '', services: { ...ALL_SERVICES_FALSE }, lat: null, lng: null });
   const [isSaving, setIsSaving] = useState(false);
 
-  const [activeFilters, setActiveFilters] = useState({
-    parking: true,
-    graywater: true,
-    blackwater: true,
-    freshwater: true,
-    electricity: true,
-    hidden_gems: true, 
-  });
-
-  const [weather, setWeather] = useState({
-    temp: '--', sunrise: '--:--', sunset: '--:--', icon: <Sun size={18} color="#D8A826" />,
-  });
+  const [activeFilters, setActiveFilters] = useState({ ...ALL_FILTERS_TRUE });
+  const [weather, setWeather] = useState({ temp: '--', sunrise: '--:--', sunset: '--:--', icon: <Sun size={18} color="#D8A826" /> });
 
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
       const { data: propsData } = await supabase.from('proposals').select('*');
-      if (propsData?.length > 0) {
-        setTopProposal([...propsData].sort((a, b) => (b.votes_up || 0) - (a.votes_up || 0))[0]);
-      }
+      if (propsData?.length > 0) setTopProposal([...propsData].sort((a, b) => (b.votes_up || 0) - (a.votes_up || 0))[0]);
+      
       const { data: logData } = await supabase.from('logbook').select('*').order('created_at', { ascending: false }).limit(1);
       if (logData?.length > 0) setLatestEntry(logData[0]);
       
@@ -260,17 +176,27 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   }, [pois]);
 
   const filteredPois = useMemo(() => {
-    const activeKeys = Object.entries(activeFilters).filter(([k, v]) => v && k !== 'hidden_gems').map(([k]) => k);
+    const activeKeys = Object.keys(QUICK_FILTERS).filter(k => activeFilters[k]);
     if (activeKeys.length === 0) return [];
     return validPois.filter((poi) => activeKeys.some((key) => poi.serviceFlags[key]));
   }, [validPois, activeFilters]);
 
+  const openFilterModal = () => {
+    setFilterModalRendered(true);
+    setTimeout(() => setFilterModalVisible(true), 50);
+  };
+
+  const closeFilterModal = () => {
+    setFilterModalVisible(false);
+    setTimeout(() => setFilterModalRendered(false), 400);
+  };
+
   const toggleFilter = (key) => setActiveFilters((prev) => ({ ...prev, [key]: !prev[key] }));
-  const selectAllFilters = () => setActiveFilters({ parking: true, graywater: true, blackwater: true, freshwater: true, electricity: true, hidden_gems: true });
+  const selectAllFilters = () => setActiveFilters({ ...ALL_FILTERS_TRUE });
   const clearAllFilters = () => setActiveFilters({ parking: false, graywater: false, blackwater: false, freshwater: false, electricity: false, hidden_gems: false });
 
   const getMarkerIconForPoi = (poi) => {
-    const activeKeys = Object.entries(activeFilters).filter(([k, v]) => v && poi.serviceFlags[k]).map(([k]) => k);
+    const activeKeys = Object.keys(QUICK_FILTERS).filter(k => activeFilters[k] && poi.serviceFlags[k]);
     if (activeKeys.length === 1) return singleServiceIcons[activeKeys[0]] || singleServiceIcons.default;
     if (activeKeys.length > 1) return buildMultiServiceIcon(activeKeys);
     return singleServiceIcons.default;
@@ -283,52 +209,27 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
       const data = await res.json();
       const addr = data.address || {};
       const placeName = data.name || addr.caravan_site || addr.camp_site || addr.road || "Markerad plats";
-      
-      // Detektera automatiskt tjänster baserat på namnet för att hjälpa användaren
-      const autoFlags = getPoiServiceFlags({ name: placeName }, '');
-      
-      setNewPoi({ 
-        name: placeName, 
-        services: autoFlags,
-        lat: latlng.lat, 
-        lng: latlng.lng 
-      });
+      setNewPoi({ name: placeName, services: { ...ALL_SERVICES_FALSE }, lat: latlng.lat, lng: latlng.lng });
     } catch (e) {
-      setNewPoi({ 
-        name: 'Markerad plats', 
-        services: { parking: false, graywater: false, blackwater: false, freshwater: false, electricity: false },
-        lat: latlng.lat, 
-        lng: latlng.lng 
-      });
+      setNewPoi({ name: 'Markerad plats', services: { ...ALL_SERVICES_FALSE }, lat: latlng.lat, lng: latlng.lng });
     }
   };
 
-  const toggleServiceInModal = (key) => {
-    setNewPoi(prev => ({
-      ...prev,
-      services: { ...prev.services, [key]: !prev.services[key] }
-    }));
-  };
+  const toggleServiceInModal = (key) => setNewPoi(prev => ({ ...prev, services: { ...prev.services, [key]: !prev.services[key] } }));
 
   const handleSavePoi = async () => {
     if (!newPoi.name.trim()) return;
     setIsSaving(true);
-    
-    // Vi sparar både i den gamla 'category'-kolumnen (första valet) och de nya boolean-kolumnerna
     const firstSelected = Object.keys(newPoi.services).find(k => newPoi.services[k]) || 'default';
+    
+    const payload = {
+      name: newPoi.name.trim(), category: firstSelected, latitude: newPoi.lat, longitude: newPoi.lng, created_by: currentUser?.id
+    };
+    Object.keys(newPoi.services).forEach(key => {
+      payload[`has_${key}`] = newPoi.services[key];
+    });
 
-    const { error } = await supabase.from('pois').insert([{
-      name: newPoi.name.trim(),
-      category: firstSelected,
-      latitude: newPoi.lat,
-      longitude: newPoi.lng,
-      has_parking: newPoi.services.parking,
-      has_graywater: newPoi.services.graywater,
-      has_blackwater: newPoi.services.blackwater,
-      has_freshwater: newPoi.services.freshwater,
-      has_electricity: newPoi.services.electricity,
-      created_by: currentUser?.id
-    }]);
+    const { error } = await supabase.from('pois').insert([payload]);
 
     if (!error) {
       setShowCreateModal(false);
@@ -344,10 +245,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     if (!selectedPoiForNav) return;
     const lat = selectedPoiForNav.lat || selectedPoiForNav.latitude;
     const lng = selectedPoiForNav.lng || selectedPoiForNav.longitude;
-    const url = type === 'waze' 
-      ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` 
-      : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-    
+    const url = type === 'waze' ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
     window.open(url, '_blank');
     setShowNavModal(false);
   };
@@ -410,11 +308,11 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             })}
           </MapContainer>
 
-          <div style={legendButtonStyle} onClick={() => setShowFilterModal(true)}>
+          <div style={legendButtonStyle} onClick={openFilterModal}>
             <span style={{ fontSize: '10px', fontWeight: '800', color: '#95A5A6', marginRight: '2px' }}>POI</span>
             <div style={{ width: '1px', height: '12px', backgroundColor: '#E5DED2' }}></div>
-            {['parking', 'graywater', 'blackwater', 'freshwater', 'electricity'].map(k => (
-              <span key={k} style={{ ...dot, backgroundColor: activeFilters[k] ? SERVICE_META[k].color : '#D5D8D1' }}></span>
+            {Object.keys(QUICK_FILTERS).map(k => (
+              <span key={k} style={{ ...dot, backgroundColor: activeFilters[k] ? QUICK_FILTERS[k].color : '#D5D8D1' }}></span>
             ))}
             <div style={{ width: '1px', height: '12px', backgroundColor: '#E5DED2' }}></div>
             <Star size={13} fill={activeFilters.hidden_gems ? "#FFD700" : "none"} color={activeFilters.hidden_gems ? "#B8860B" : "#A9B4B5"} />
@@ -442,14 +340,44 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             <Camera size={20} color="#4D93C7" />
             <span style={btnLabelStyle}>Ta en bild till Loggboken</span>
           </button>
-          <button style={actionBtnStyle} onClick={() => setActiveTab('convoy')}>
+          
+          {/* HÄR ÄR MAGIN: Lägg in en post-it lapp i minnet innan vi byter flik */}
+          <button style={actionBtnStyle} onClick={() => {
+            sessionStorage.setItem('openConvoySearch', 'true');
+            setActiveTab('convoy');
+          }}>
             <Navigation size={20} color="#CF651F" />
-            <span style={btnLabelStyle}>Hitta</span>
+            <span style={btnLabelStyle}>Hitta platser</span>
           </button>
         </div>
       </div>
 
-      {/* MODAL: SKAPA POI - NU MED MULTI-VAL-UI */}
+        {/* FILTER MODAL */}
+      {filterModalRendered && (
+        <div style={{ ...modalOverlayStyle, opacity: filterModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeFilterModal}>
+          <div style={{ ...modalSheetStyle, transform: filterModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)' }} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHandleStyle}></div>
+            <h3 style={modalTitleStyle}>Filtrera POIs</h3>
+            <div style={filterListStyle}>
+              {Object.keys(QUICK_FILTERS).map(key => (
+                <button key={key} type="button" onClick={() => toggleFilter(key)} style={{ ...filterOptionStyle, ...(activeFilters[key] ? filterOptionActiveStyle : {}) }}>
+                  <span style={{ ...filterDotStyle, backgroundColor: QUICK_FILTERS[key].color }}></span> {QUICK_FILTERS[key].label}
+                </button>
+              ))}
+              <button type="button" onClick={() => toggleFilter('hidden_gems')} style={{ ...filterOptionStyle, ...(activeFilters.hidden_gems ? filterOptionActiveStyle : {}) }}>
+                <Star size={16} fill={activeFilters.hidden_gems ? "#FFD700" : "none"} color="#B8860B" /> Gömda Pärlor
+              </button>
+            </div>
+            <div style={modalActionsStyle}>
+              <button onClick={selectAllFilters} style={secondaryModalBtnStyle}>Alla</button>
+              <button onClick={clearAllFilters} style={secondaryModalBtnStyle}>Rensa</button>
+              <button onClick={closeFilterModal} style={primaryModalBtnStyle}>Klar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: SKAPA POI */}
       {showCreateModal && (
         <div style={modalOverlayStyle} onClick={() => setShowCreateModal(false)}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
@@ -459,28 +387,17 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             </div>
             
             <p style={{ fontSize: '14px', color: '#667276', marginBottom: '8px' }}>Namn på platsen</p>
-            <input 
-              type="text" 
-              value={newPoi.name} 
-              onChange={e => setNewPoi({...newPoi, name: e.target.value})} 
-              style={inputStyle} 
-            />
+            <input type="text" value={newPoi.name} onChange={e => setNewPoi({...newPoi, name: e.target.value})} style={inputStyle} />
 
             <p style={{ fontSize: '14px', color: '#667276', marginBottom: '12px', marginTop: '15px' }}>Vad finns här?</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
-              {Object.keys(SERVICE_META).map(key => (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px', maxHeight: '180px', overflowY: 'auto', paddingRight: '5px' }}>
+              {Object.keys(SERVICE_META_ALL).map(key => (
                 <button
-                  key={key}
-                  onClick={() => toggleServiceInModal(key)}
-                  style={{
-                    ...serviceToggleBtn,
-                    backgroundColor: newPoi.services[key] ? SERVICE_META[key].color : '#F0F0F0',
-                    color: newPoi.services[key] ? 'white' : '#666',
-                    border: newPoi.services[key] ? 'none' : '1px solid #DDD'
-                  }}
+                  key={key} onClick={() => toggleServiceInModal(key)}
+                  style={{ ...serviceToggleBtn, backgroundColor: newPoi.services[key] ? SERVICE_META_ALL[key].color : '#F0F0F0', color: newPoi.services[key] ? 'white' : '#666', border: newPoi.services[key] ? 'none' : '1px solid #DDD' }}
                 >
                   {newPoi.services[key] && <Check size={14} style={{ marginRight: '4px' }} />}
-                  {SERVICE_META[key].label}
+                  {SERVICE_META_ALL[key].label}
                 </button>
               ))}
             </div>
@@ -504,31 +421,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
               <button onClick={() => openInApp('waze')} style={navOptionBtnStyle}><Navigation size={20} color="#33CCFF" /> Waze</button>
             </div>
             <button onClick={() => setShowNavModal(false)} style={cancelBtnStyle}>Avbryt</button>
-          </div>
-        </div>
-      )}
-
-      {/* FILTER MODAL */}
-      {showFilterModal && (
-        <div style={modalOverlayStyle} onClick={() => setShowFilterModal(false)}>
-          <div style={modalSheetStyle} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHandleStyle}></div>
-            <h3 style={modalTitleStyle}>Filtrera POIs</h3>
-            <div style={filterListStyle}>
-              {Object.keys(SERVICE_META).map(key => (
-                <button key={key} type="button" onClick={() => toggleFilter(key)} style={{ ...filterOptionStyle, ...(activeFilters[key] ? filterOptionActiveStyle : {}) }}>
-                  <span style={{ ...filterDotStyle, backgroundColor: SERVICE_META[key].color }}></span> {SERVICE_META[key].label}
-                </button>
-              ))}
-              <button type="button" onClick={() => toggleFilter('hidden_gems')} style={{ ...filterOptionStyle, ...(activeFilters.hidden_gems ? filterOptionActiveStyle : {}) }}>
-                <Star size={16} fill={activeFilters.hidden_gems ? "#FFD700" : "none"} color="#B8860B" /> Gömda Pärlor
-              </button>
-            </div>
-            <div style={modalActionsStyle}>
-              <button onClick={selectAllFilters} style={secondaryModalBtnStyle}>Alla</button>
-              <button onClick={clearAllFilters} style={secondaryModalBtnStyle}>Rensa</button>
-              <button onClick={() => setShowFilterModal(false)} style={primaryModalBtnStyle}>Klar</button>
-            </div>
           </div>
         </div>
       )}
@@ -561,7 +453,7 @@ const modalOverlayStyle = { position: 'fixed', inset: 0, zIndex: 3000, backgroun
 const modalStyle = { backgroundColor: 'white', padding: '25px', borderRadius: '28px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', margin: '0 20px' };
 const modalSheetStyle = { width: '100%', maxWidth: '520px', backgroundColor: '#FAF9F6', borderTopLeftRadius: '26px', borderTopRightRadius: '26px', padding: '14px 18px 22px 18px', alignSelf: 'flex-end' };
 const modalHandleStyle = { width: '46px', height: '5px', borderRadius: '999px', backgroundColor: '#D5D8D1', margin: '0 auto 14px auto' };
-const modalTitleStyle = { margin: '0 0 6px 0', fontSize: '18px', color: '#243137' };
+const modalTitleStyle = { margin: '0 0 16px 0', fontSize: '18px', color: '#243137' };
 const modalTextStyle = { margin: '0 0 16px 0', fontSize: '13px', color: '#667276' };
 const filterListStyle = { display: 'flex', flexDirection: 'column', gap: '10px' };
 const filterOptionStyle = { width: '100%', border: '1px solid #E6DED1', backgroundColor: '#F7F4EE', borderRadius: '16px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', fontWeight: 'bold' };
