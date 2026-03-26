@@ -436,7 +436,24 @@ function ConvoyView({ currentUser }) {
              );
           })}
 
-          {tempMarker && <Marker position={tempMarker} icon={redIcon}><Popup autoOpen><button onClick={()=>triggerAddFlow(modalDraft)} style={goButtonStyle}>➕ Föreslå</button></Popup></Marker>}
+          {/* UPPDATERAD KART-POPUP (Snyggare design när man klickar fritt) */}
+          {tempMarker && (
+            <Marker position={tempMarker} icon={redIcon}>
+              <Popup autoOpen>
+                <div style={{ textAlign: 'center', minWidth: '180px' }}>
+                  <h3 style={{ margin: '0 0 8px 0', color: '#2F5D3A', fontSize: '16px' }}>Nytt resmål?</h3>
+                  <hr style={{ border: 'none', borderTop: '1px solid #EEE7DB', marginBottom: '10px' }} />
+                  <p style={{ fontSize: '12px', color: '#667276', marginBottom: '15px', marginTop: 0 }}>
+                    Vill du tipsa konvojen om den här platsen?
+                  </p>
+                  <button onClick={() => triggerAddFlow(modalDraft)} style={goButtonStyle}>
+                    ➕ Föreslå plats
+                  </button>
+                </div>
+              </Popup>
+            </Marker>
+          )}
+
         </MapContainer>
         <div style={legendButtonStyle} onClick={openFindModal}><Search size={16} style={{marginRight:'8px', flexShrink: 0}}/><span>Hitta platser & POIs</span></div>
       </div>
@@ -563,8 +580,74 @@ function ConvoyView({ currentUser }) {
         </div>
       )}
 
-      {showCreateModal && <div style={modalOverlayStyle} onClick={()=>setShowCreateModal(false)}><div style={modalStyle} onClick={e=>e.stopPropagation()}><h3>Föreslå plats</h3><input value={modalDraft.name} onChange={e=>setModalDraft({...modalDraft,name:e.target.value})} style={searchInputStyle}/><button onClick={handleCreateNew} style={saveBtnStyle}>Publicera</button></div></div>}
-      {showReplaceModal && <div style={modalOverlayStyle} onClick={()=>setShowReplaceModal(false)}><div style={modalSheetStyle} onClick={e=>e.stopPropagation()}><h3 style={{textAlign:'center'}}>Konvojen är full!</h3><div style={{display:'flex',flexDirection:'column',gap:'8px'}}>{proposals.map(p=><button key={p.id} onClick={()=>handleReplace(p.id)} style={navOptionBtnStyle}>{p.name}</button>)}</div><button onClick={()=>setShowReplaceModal(false)} style={cancelBtnStyle}>Avbryt</button></div></div>}
+      {/* UPPDATERAD SKAPA-MODAL (Snyggare design istället för den lilla rutan) */}
+      {showCreateModal && (
+        <div style={modalOverlayStyle} onClick={() => setShowCreateModal(false)}>
+          <div style={modalSheetStyle} onClick={e => e.stopPropagation()}>
+            <div style={modalHandleStyle} />
+            <h3 style={{ textAlign: 'center', margin: '0 0 8px 0', fontSize: '20px', color: '#243137' }}>Föreslå till konvojen</h3>
+            <p style={{ textAlign: 'center', color: '#667276', fontSize: '14px', marginTop: '0', marginBottom: '20px' }}>Vad heter platsen du vill tipsa om?</p>
+            <input 
+              value={modalDraft.name} 
+              onChange={e => setModalDraft({...modalDraft, name: e.target.value})} 
+              style={searchInputStyle} 
+              placeholder="T.ex. Mysig ställplats vid vattnet..."
+            />
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+              <button onClick={() => setShowCreateModal(false)} style={secondaryModalBtnStyle}>Avbryt</button>
+              <button onClick={handleCreateNew} style={primaryModalBtnStyle}>Publicera tips</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UPPDATERAD BYTA-UT-MODAL (Utgråad lista + rött streck) */}
+      {showReplaceModal && (
+        <div style={modalOverlayStyle} onClick={() => setShowReplaceModal(false)}>
+          <div style={modalSheetStyle} onClick={e => e.stopPropagation()}>
+            <h3 style={{ textAlign: 'center', margin: '0 0 6px 0', fontSize: '18px', color: '#243137' }}>
+              Konvojens förslag till nästa resmål
+            </h3>
+            <p style={{ textAlign: 'center', color: '#667276', fontSize: '14px', marginTop: '0', marginBottom: '24px' }}>
+              Max 5 förslag. Vill du byta ut förslaget som är utröstat?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {proposals.map((p, index) => {
+                const isLast = index === proposals.length - 1;
+                return (
+                  <React.Fragment key={p.id}>
+                    {isLast && proposals.length > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', margin: '6px 0' }}>
+                        <div style={{ flex: 1, height: '1px', backgroundColor: '#E74C3C' }}></div>
+                        <span style={{ color: '#E74C3C', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', padding: '0 10px' }}>
+                          Utröstad
+                        </span>
+                        <div style={{ flex: 1, height: '1px', backgroundColor: '#E74C3C' }}></div>
+                      </div>
+                    )}
+                    <button 
+                      onClick={() => isLast ? handleReplace(p.id) : null}
+                      disabled={!isLast}
+                      style={{ 
+                        ...navOptionBtnStyle, 
+                        justifyContent: 'center', 
+                        textAlign: 'center',
+                        borderColor: isLast ? '#FADBD8' : '#EEE7DB',
+                        opacity: isLast ? 1 : 0.4, 
+                        cursor: isLast ? 'pointer' : 'default',
+                        color: isLast ? '#243137' : '#98A4A5'
+                      }}
+                    >
+                      {p.name}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+            <button onClick={() => setShowReplaceModal(false)} style={cancelBtnStyle}>Avbryt</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

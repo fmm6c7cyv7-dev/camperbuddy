@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import {
   Trophy, Clock, Camera, Navigation, Map as MapIcon, Sun, Sunrise, Sunset, Cloud, Star,
-  X, Save, Loader2, Plus, MapPin, Check, Droplet, Zap, CloudRain, CloudSun
+  X, Save, Loader2, Plus, MapPin, Check, Droplet, Zap, CloudRain, CloudSun,
+  Share2, Clipboard, MessageSquare, Mail
 } from 'lucide-react';
 
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
@@ -22,19 +23,16 @@ function MapEvents({ onMapClick }) {
   return null;
 }
 
-// UPPDATERAD: Använder map.flyTo för en mjuk, animerad autozoom!
 function ChangeView({ center, zoom, trigger }) {
   const map = useMap();
   useEffect(() => { 
     if (center && center[0] && center[1]) {
-      // Flyger mjukt till positionen med rätt zoom. Trigger tvingar den att köra om man klickar på knappen!
       map.flyTo(center, zoom || 10, { duration: 1.0 }); 
     }
   }, [center, zoom, trigger, map]);
   return null;
 }
 
-// NY: Den klassiska blåa Google-pricken
 const blueDotIcon = L.divIcon({
   html: `<div style="width: 18px; height: 18px; background-color: #4285F4; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 8px rgba(0,0,0,0.4);"></div>`,
   className: '', iconSize: [18, 18], iconAnchor: [9, 9]
@@ -48,7 +46,6 @@ const createPoiIcon = (color) => new L.Icon({
 
 const redIcon = createPoiIcon('red');
 
-// Färgmappning för kart-ikoner
 const singleServiceIcons = {
   parking: createPoiIcon('green'),
   freshwater: createPoiIcon('blue'),
@@ -125,18 +122,14 @@ const ALL_SERVICES_FALSE = Object.keys(SERVICE_META_ALL).reduce((acc, key) => ({
 // --- KOMPONENT START ---
 function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   
-  // NY: Funktion för att flyga till vinnaren på Konvoj-fliken
   const handleGoToTopProposal = (proposal) => {
     if (proposal && proposal.latitude && proposal.longitude) {
-      // 1. Spara koordinater och zoom i sessionStorage
       sessionStorage.setItem('openConvoyFocus', JSON.stringify({
         coords: [parseFloat(proposal.latitude), parseFloat(proposal.longitude)],
-        zoom: 15 // Zooma in lite extra nära för en tydlig vy
+        zoom: 15
       }));
-      // 2. Byt flik som vanligt
       setActiveTab('convoy');
     } else {
-      // Om vi inte har koordinater, öppna bara fliken normalt
       setActiveTab('convoy');
     }
   };
@@ -163,36 +156,55 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
 
   const [activeFilters, setActiveFilters] = useState({ ...ALL_FILTERS_TRUE });
 
-  // --- NYA KART & POSITION STATES ---
   const [userLocation, setUserLocation] = useState(null);
-  const [mapCenter, setMapCenter] = useState([59.61, 16.54]); // Default Västerås
-  const [mapZoom, setMapZoom] = useState(10); // Standard-zoom för start (50km)
+  const [mapCenter, setMapCenter] = useState([59.61, 16.54]); 
+  const [mapZoom, setMapZoom] = useState(10); 
   
-  // Väder och Plats States
-  const [locationInfo, setLocationInfo] = useState({ name: 'SÖKER POSITION...', coords: '0.0000, 0.0000' });
+  const [locationInfo, setLocationInfo] = useState({ name: 'SÖKER...', coords: '' });
   const [weather, setWeather] = useState({ temp: '--', sunrise: '--:--', sunset: '--:--', icon: <Sun size={18} color="#D8A826" /> });
 
-  // --- HÄMTAR VÄDER OCH STADSNAAMN BASERAT PÅ POSITION ---
+  const [showShareModal, setShowShareModal] = useState(false);
+  const inviteLink = "https://camperbuddy.vercel.app/"; 
+
+  const shareViaOs = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Gå med i min konvoj på CamperBUDDY',
+          text: 'Hej! Gå med i min konvoj på CamperBUDDY så kan vi dela våra resor och planer. 🚐💨',
+          url: inviteLink,
+        });
+      } catch (error) {
+        console.error('Fel vid delning:', error);
+      }
+    }
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      alert("Inbjudningslänken har kopierats till urklipp!");
+    });
+  };
+
+  const shareViaSmsUrl = `sms:?&body=Hej! Gå med i min konvoj på CamperBUDDY: ${inviteLink}`;
+  const shareViaEmailUrl = `mailto:?subject=Gå med i min konvoj på CamperBUDDY&body=Hej! Gå med i min konvojgrupp på CamperBUDDY-appen: ${inviteLink}`;
+
   const fetchLocationAndWeather = async (lat, lng) => {
     try {
-      // Uppdaterar användarens position
       const coords = [lat, lng];
       setUserLocation(coords);
       setMapCenter(coords);
-      setMapZoom(10); // Zoomnivå 10 = ca 50km
+      setMapZoom(10); 
 
-      // 1. Hämta Väder (Open-Meteo)
       const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code&daily=sunrise,sunset&timezone=auto`);
       const weatherData = await weatherRes.json();
       
-      // 2. Hämta Platsnamn (Nominatim)
       const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`);
       const geoData = await geoRes.json();
       const addr = geoData.address || {};
       const cityName = addr.city || addr.town || addr.village || addr.municipality || "EXPEDITION";
 
       const timeConfig = { hour: '2-digit', minute: '2-digit' };
-      
       const weatherCode = weatherData?.current?.weather_code ?? 2;
       
       let WeatherIcon = <Sun size={18} color="#D8A826" />; 
@@ -218,7 +230,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
 
     } catch (error) {
       console.error('Kunde inte hämta plats/väder:', error);
-      // Fallback
       setUserLocation([59.61, 16.54]);
       setMapCenter([59.61, 16.54]);
       setMapZoom(10);
@@ -299,7 +310,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     if (!selectedNavPoi) return;
     const lat = selectedNavPoi.lat || selectedNavPoi.latitude;
     const lng = selectedNavPoi.lng || selectedNavPoi.longitude;
-    // FIXAD: Korrekt URL för Google Maps
     const url = type === 'waze' 
       ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` 
       : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
@@ -373,33 +383,55 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     <>
       <div style={{ padding: '10px 20px 100px 20px' }} className="animate-fade-in">
         
-        {/* --- VÄDERBAR MED PLATS --- */}
-        <div style={weatherCardStyle}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 200px' }}>
-              <div style={{ backgroundColor: '#EEF2ED', padding: '8px', borderRadius: '12px' }}><MapPin size={16} color="#2F5D3A" /></div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: '13px', fontWeight: '900', color: '#243137', letterSpacing: '0.5px' }}>{locationInfo.name}</span>
-                <span style={{ fontSize: '10px', fontWeight: '600', color: '#98A4A5', fontFamily: 'monospace' }}>{locationInfo.coords}</span>
-              </div>
+        {/* --- NY LAYOUT: VÄDER (2/3) OCH INBJUDAN (1/3) SIDA VID SIDA --- */}
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'stretch' }}>
+          
+          {/* VÄDER & PLATS (2/3 Vänster) */}
+          <div style={{ ...weatherCardStyle, flex: 2, margin: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '14px 10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <MapPin size={16} color="#2F5D3A" />
+              <span style={{ fontSize: '14px', fontWeight: '900', color: '#243137', letterSpacing: '0.5px' }}>{locationInfo.name}</span>
             </div>
-            
-            <div style={{ 
-              display: 'flex', 
-              flexWrap: 'wrap', 
-              gap: '16px', 
-              alignItems: 'center',
-              justifyContent: 'center', 
-              flex: '1 1 250px' 
-            }}>
-              <div style={weatherItemStyle}>{weather.icon} <b style={{ fontSize: '15px' }}>{weather.temp}°C</b></div>
-              <div style={{ width: '1px', height: '20px', backgroundColor: '#E6E2D9' }}></div>
-              <div style={weatherItemStyle}><Sunrise size={14} color="#CF651F" /> <span style={{fontSize: '12px'}}>{weather.sunrise}</span></div>
-              <div style={weatherItemStyle}><Sunset size={14} color="#2F5D3A" /> <span style={{fontSize: '12px'}}>{weather.sunset}</span></div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={weatherItemStyle}>{weather.icon} <b style={{ fontSize: '14px' }}>{weather.temp}°C</b></div>
+              <div style={{ width: '1px', height: '14px', backgroundColor: '#E6E2D9' }}></div>
+              <div style={weatherItemStyle}><Sunrise size={12} color="#CF651F" /> <span style={{fontSize: '12px'}}>{weather.sunrise}</span></div>
+              <div style={weatherItemStyle}><Sunset size={12} color="#2F5D3A" /> <span style={{fontSize: '12px'}}>{weather.sunset}</span></div>
             </div>
-            
           </div>
+
+          {/* INBJUDAN (1/3 Höger) */}
+          <div 
+            onClick={() => setShowShareModal(true)}
+            style={{ 
+              backgroundColor: '#F7F4EE', 
+              borderRadius: '20px', 
+              border: '1px solid #EEE7DB',
+              padding: '12px 8px', 
+              flex: 1,
+              display: 'flex', 
+              flexDirection: 'column',
+              alignItems: 'center', 
+              justifyContent: 'center',
+              gap: '8px',
+              cursor: 'pointer',
+              boxShadow: '0 4px 15px rgba(0,0,0,0.02)',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{ 
+              width: '38px', height: '38px', 
+              backgroundColor: '#EEF3EA', 
+              borderRadius: '50%', 
+              display: 'flex', alignItems: 'center', justifyContent: 'center' 
+            }}>
+              <Share2 size={18} color="#2F5D3A" />
+            </div>
+            <div>
+              <h3 style={{ margin: '0', fontSize: '12px', color: '#172026', fontWeight: '800', lineHeight: '1.2' }}>Bjud in till<br/>konvoj</h3>
+            </div>
+          </div>
+          
         </div>
 
         <div style={mapContainerStyle}>
@@ -408,7 +440,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='© OpenStreetMap' />
             <MapEvents onMapClick={handleMapClick} />
             
-            {/* RITAR UT ANVÄNDARENS POSITION MED BLÅ PRICK */}
             {userLocation && (
               <Marker position={userLocation} icon={blueDotIcon} zIndexOffset={1000}>
                 <Popup><strong style={{ color: '#4285F4' }}>Du är här</strong></Popup>
@@ -466,7 +497,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
           </div>
         </div>
         
-        {/* --- CENTRERA KARTA-KNAPPEN --- */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', marginTop: '-10px' }}>
            <button 
               onClick={() => { 
@@ -483,7 +513,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         </div>
           
         <div style={summaryGridStyle}>
-          {/* HÄR ANVÄNDS DEN NYA FUNKTIONEN FÖR NAVIGERING */}
           <div style={smallSectionStyle} onClick={() => handleGoToTopProposal(topProposal)}>
             <div style={sectionHeaderStyle}><Trophy size={14} color="#D8A826" /> LEDER OMRÖSTNINGEN</div>
             <div style={miniCardStyle}>
@@ -525,6 +554,43 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
       </div>
 
       {/* --- MODALER --- */}
+      {showShareModal && (
+        <div style={{ ...modalOverlayStyle, opacity: 1, zIndex: 6000 }} onClick={() => setShowShareModal(false)}>
+          <div style={{ ...modalSheetStyle, padding: '24px' }} className="animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div style={modalHandleStyle}></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ margin: 0, fontSize: '20px', color: '#172026', fontWeight: '800' }}>Bjud in vänner</h2>
+              <button onClick={() => setShowShareModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} color="#667276" /></button>
+            </div>
+            
+            <p style={{ fontSize: '14px', color: '#667276', marginBottom: '24px', lineHeight: '1.4' }}>
+              Dela inbjudningslänken så kan dina Buddies ansluta och se era gemensamma resplaner.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {navigator.share && (
+                <button type="button" onClick={shareViaOs} style={shareMainBtnStyle}>
+                  <Share2 size={20} /> Dela via telefonen
+                </button>
+              )}
+              
+              <button type="button" onClick={copyToClipboard} style={shareSecondaryBtnStyle}>
+                <Clipboard size={18} /> Kopiera inbjudningslänk
+              </button>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+                <a href={shareViaSmsUrl} style={{ ...shareSecondaryBtnStyle, flex: 1, textDecoration: 'none' }}>
+                  <MessageSquare size={18} /> SMS
+                </a>
+                <a href={shareViaEmailUrl} style={{ ...shareSecondaryBtnStyle, flex: 1, textDecoration: 'none' }}>
+                  <Mail size={18} /> E-post
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {filterModalRendered && (
         <div style={{ ...modalOverlayStyle, opacity: filterModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeFilterModal}>
           <div style={{ ...modalSheetStyle, transform: filterModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)' }} onClick={(e) => e.stopPropagation()}>
@@ -624,5 +690,8 @@ const saveBtnStyle = { width: '100%', padding: '16px', backgroundColor: '#2F5D3A
 const navOptionBtnStyle = { width: '100%', padding: '16px', backgroundColor: 'white', border: '1px solid #E6DED1', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '16px', fontWeight: 'bold', color: '#334247' };
 const cancelBtnStyle = { width: '100%', padding: '14px', border: 'none', background: 'none', color: '#95A5A6', fontSize: '14px', marginTop: '10px', fontWeight: 'bold' };
 const modalStyle = { backgroundColor: 'white', padding: '25px', borderRadius: '28px', width: '90%', maxWidth: '400px', alignSelf: 'center', marginBottom: '100px' };
+
+const shareMainBtnStyle = { width: '100%', padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '16px', fontSize: '15px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer' };
+const shareSecondaryBtnStyle = { width: '100%', padding: '14px', backgroundColor: 'white', color: '#334247', border: '1px solid #E6DED1', borderRadius: '16px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' };
 
 export default DashboardView;
