@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import {
   Trophy, Clock, Camera, Navigation, Map as MapIcon, Sun, Sunrise, Sunset, Cloud, Star,
-  X, Save, Loader2, Plus, MapPin, Check, Droplet, Zap, CloudRain
+  X, Save, Loader2, Plus, MapPin, Check, Droplet, Zap, CloudRain, CloudSun
 } from 'lucide-react';
 
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
@@ -132,28 +132,58 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   const [isSaving, setIsSaving] = useState(false);
 
   const [activeFilters, setActiveFilters] = useState({ ...ALL_FILTERS_TRUE });
+  
+  // Väder och Plats States
+  const [locationInfo, setLocationInfo] = useState({ name: 'SÖKER POSITION...', coords: '0.0000, 0.0000' });
   const [weather, setWeather] = useState({ temp: '--', sunrise: '--:--', sunset: '--:--', icon: <Sun size={18} color="#D8A826" /> });
 
-  // 1. SMART VÄDERFUNKTION SOM TAR EMOT KOORDINATER
-  const fetchWeatherData = async (lat, lng) => {
+  // --- HÄMTAR VÄDER OCH STADSNAAMN BASERAT PÅ POSITION ---
+  const fetchLocationAndWeather = async (lat, lng) => {
     try {
-      const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code&daily=sunrise,sunset&timezone=auto`);
-      const data = await res.json();
+      // 1. Hämta Väder (Open-Meteo)
+      const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code&daily=sunrise,sunset&timezone=auto`);
+      const weatherData = await weatherRes.json();
+      
+      // 2. Hämta Platsnamn (Nominatim)
+      const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`);
+      const geoData = await geoRes.json();
+      const addr = geoData.address || {};
+      const cityName = addr.city || addr.town || addr.village || addr.municipality || "EXPEDITION";
+
       const timeConfig = { hour: '2-digit', minute: '2-digit' };
       
-      const weatherCode = data?.current?.weather_code ?? 0;
-      let WeatherIcon = <Sun size={18} color="#D8A826" />;
-      if (weatherCode > 3) WeatherIcon = <Cloud size={18} color="#8D9998" />;
-      if (weatherCode > 60) WeatherIcon = <CloudRain size={18} color="#4D93C7" />;
+      // Realistisk fallback: Om API:et svajar, anta "Växlande molnighet" (kod 2)
+      const weatherCode = weatherData?.current?.weather_code ?? 2;
+      
+      // Avancerad Ikon-logik för v5.5.0
+      let WeatherIcon = <Sun size={18} color="#D8A826" />; // 0-1: Klart
+      if (weatherCode >= 2 && weatherCode <= 3) {
+        WeatherIcon = <CloudSun size={18} color="#8D9998" />; // 2-3: Växlande
+      } else if (weatherCode > 3 && weatherCode < 60) {
+        WeatherIcon = <Cloud size={18} color="#8D9998" />; // 45-57: Mulet/Dimma
+      } else if (weatherCode >= 60) {
+        WeatherIcon = <CloudRain size={18} color="#4D93C7" />; // 60+: Regn
+      }
 
+      // Uppdatera väder-state
       setWeather({
-        temp: Math.round(data?.current?.temperature_2m ?? 0),
-        sunrise: data?.daily?.sunrise?.[0] ? new Date(data.daily.sunrise[0]).toLocaleTimeString('sv-SE', timeConfig) : '--:--',
-        sunset: data?.daily?.sunset?.[0] ? new Date(data.daily.sunset[0]).toLocaleTimeString('sv-SE', timeConfig) : '--:--',
+        temp: Math.round(weatherData?.current?.temperature_2m ?? 0),
+        sunrise: weatherData?.daily?.sunrise?.[0] ? new Date(weatherData.daily.sunrise[0]).toLocaleTimeString('sv-SE', timeConfig) : '--:--',
+        sunset: weatherData?.daily?.sunset?.[0] ? new Date(weatherData.daily.sunset[0]).toLocaleTimeString('sv-SE', timeConfig) : '--:--',
         icon: WeatherIcon,
       });
+
+      // Uppdatera plats-state med proffsig "rese-dator"-look
+      setLocationInfo({
+        name: cityName.toUpperCase(),
+        coords: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`
+      });
+
     } catch (error) {
-      console.error('Kunde inte hämta väder:', error);
+      console.error('Kunde inte hämta plats/väder:', error);
+      // Fail-safe: Om GPS eller API dör, visa Västerås med växlande molnighet
+      setLocationInfo({ name: "VÄSTERÅS", coords: "59.6100° N, 16.5400° E" });
+      setWeather(prev => ({ ...prev, icon: <CloudSun size={18} color="#8D9998" /> }));
     }
   };
 
@@ -178,23 +208,23 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     }
   };
 
-  // 2. KÖR PLATS OCH DATA DIREKT NÄR KOMPONENTEN LADDAS
-  useEffect(() => { 
-    fetchDashboardData(); 
+  // --- KÖR POSITION OCH DATA DIREKT NÄR KOMPONENTEN LADDAS ---
+  useEffect(() => {
+    fetchDashboardData();
 
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          fetchWeatherData(position.coords.latitude, position.coords.longitude);
+          fetchLocationAndWeather(position.coords.latitude, position.coords.longitude);
         },
         (error) => {
-          console.warn("Plats nekad/kunde inte hämtas, använder standard:", error);
-          fetchWeatherData(59.61, 16.54); // Fallback till Västerås
+          console.warn("Plats nekad, använder standard:", error);
+          fetchLocationAndWeather(59.61, 16.54); // Fallback: Västerås
         },
         { timeout: 10000 }
       );
     } else {
-      fetchWeatherData(59.61, 16.54); // Fallback
+      fetchLocationAndWeather(59.61, 16.54); // Fallback om webbläsaren saknar stöd
     }
   }, []);
 
@@ -304,11 +334,23 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   return (
     <>
       <div style={{ padding: '10px 20px 100px 20px' }} className="animate-fade-in">
+        
+        {/* --- NY VÄDERBAR MED PLATS --- */}
         <div style={weatherCardStyle}>
-          <div style={weatherRowStyle}>
-            <div style={weatherItemStyle}>{weather.icon} <b>{weather.temp}°C</b></div>
-            <div style={weatherItemStyle}><Sunrise size={14} color="#CF651F" /> {weather.sunrise}</div>
-            <div style={weatherItemStyle}><Sunset size={14} color="#2F5D3A" /> {weather.sunset}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ backgroundColor: '#EEF2ED', padding: '8px', borderRadius: '12px' }}><MapPin size={16} color="#2F5D3A" /></div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '13px', fontWeight: '900', color: '#243137', letterSpacing: '0.5px' }}>{locationInfo.name}</span>
+                <span style={{ fontSize: '10px', fontWeight: '600', color: '#98A4A5', fontFamily: 'monospace' }}>{locationInfo.coords}</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+              <div style={weatherItemStyle}>{weather.icon} <b style={{ fontSize: '15px' }}>{weather.temp}°C</b></div>
+              <div style={{ width: '1px', height: '20px', backgroundColor: '#E6E2D9' }}></div>
+              <div style={weatherItemStyle}><Sunrise size={14} color="#CF651F" /> <span style={{fontSize: '12px'}}>{weather.sunrise}</span></div>
+              <div style={weatherItemStyle}><Sunset size={14} color="#2F5D3A" /> <span style={{fontSize: '12px'}}>{weather.sunset}</span></div>
+            </div>
           </div>
         </div>
 
@@ -370,8 +412,14 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
           
         <div style={summaryGridStyle}>
           <div style={smallSectionStyle} onClick={() => setActiveTab('convoy')}>
-            <div style={sectionHeaderStyle}><Trophy size={14} color="#D8A826" /> MIN KONVOJ VILL ÅKA HIT</div>
-            <div style={miniCardStyle}><h4 style={miniTitleStyle}>{topProposal?.name || 'Ingen rutt'}</h4></div>
+            <div style={sectionHeaderStyle}><Trophy size={14} color="#D8A826" /> LEDER OMRÖSTNINGEN</div>
+            <div style={miniCardStyle}>
+              <h4 style={miniTitleStyle}>
+                {topProposal 
+                  ? `${topProposal.created_by_name || 'En Buddy'} föreslår ${topProposal.name} som nästa stopp` 
+                  : 'Inga förslag ännu'}
+              </h4>
+            </div>
           </div>
           <div style={smallSectionStyle} onClick={() => setActiveTab('logbook')}>
             <div style={sectionHeaderStyle}><Clock size={14} color="#4D93C7" /> LOGGBOKEN</div>
@@ -497,39 +545,36 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
 // --- STYLES ---
 const loadingStateStyle = { textAlign: 'center', marginTop: '100px', color: '#8B9798' };
 const weatherCardStyle = { background: '#F7F4EE', border: '1px solid #E8E1D6', borderRadius: '20px', padding: '12px 16px', marginBottom: '14px' };
-const weatherRowStyle = { display: 'flex', justifyContent: 'center', gap: '18px', color: '#667276', fontSize: '13px' };
 const weatherItemStyle = { display: 'flex', alignItems: 'center', gap: '5px' };
 const mapContainerStyle = { height: '350px', width: '100%', borderRadius: '28px', overflow: 'hidden', marginBottom: '25px', position: 'relative', border: '5px solid #F9F7F2' };
-const legendButtonStyle = { position: 'absolute', bottom: '15px', left: '50%', transform: 'translateX(-50%)', zIndex: 2000, backgroundColor: 'rgba(255, 255, 255, 0.96)', padding: '8px 16px', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.12)', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.05)' };
+const legendButtonStyle = { position: 'absolute', bottom: '15px', left: '50%', transform: 'translateX(-50%)', zIndex: 2000, backgroundColor: 'rgba(255, 255, 255, 0.96)', padding: '8px 16px', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.12)', cursor: 'pointer' };
 const dot = { width: '10px', height: '10px', borderRadius: '50%' };
 const summaryGridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' };
 const smallSectionStyle = { cursor: 'pointer' };
-const sectionHeaderStyle = { fontSize: '11px', fontWeight: 'bold', color: '#98A4A5', marginBottom: '7px', display: 'flex', alignItems: 'flex-end', minHeight: '32px', gap: '5px', textTransform: 'uppercase' };
-const miniCardStyle = { backgroundColor: '#FAF9F6', padding: '14px', borderRadius: '20px', minHeight: '44px', display: 'flex', alignItems: 'center', border: '1px solid #EEE7DB' };
-const miniTitleStyle = { margin: 0, fontSize: '14px', color: '#243137', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+const sectionHeaderStyle = { fontSize: '10px', fontWeight: 'bold', color: '#98A4A5', marginBottom: '7px', display: 'flex', alignItems: 'flex-end', minHeight: '32px', gap: '5px', textTransform: 'uppercase' };
+const miniCardStyle = { backgroundColor: '#FAF9F6', padding: '12px', borderRadius: '20px', minHeight: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center', border: '1px solid #EEE7DB' };
+const miniTitleStyle = { margin: 0, fontSize: '13px', color: '#243137', whiteSpace: 'normal', lineHeight: '1.4', wordBreak: 'break-word' };
 const shortcutTitleStyle = { fontSize: '16px', marginBottom: '15px', color: '#243137', fontWeight: 'bold' };
 const shortcutGridStyle = { display: 'flex', gap: '15px' };
 const actionBtnStyle = { flex: 1, backgroundColor: '#FAF9F6', border: '1px solid #EEE7DB', padding: '14px 10px', borderRadius: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', minHeight: '100px' };
-const btnLabelStyle = { fontSize: '11px', fontWeight: 'bold', color: '#667276', textAlign: 'center' };
 const btnLabelStyleLong = { fontSize: '10px', fontWeight: 'bold', color: '#667276', textAlign: 'center' };
-const goButtonStyle = { width: '100%', padding: '10px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', boxShadow: '0 4px 10px rgba(47,93,58,0.2)' };
-const navOptionBtnStyle = { width: '100%', padding: '16px', backgroundColor: 'white', border: '1px solid #E6DED1', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '16px', fontWeight: 'bold', color: '#334247', cursor: 'pointer' };
-const cancelBtnStyle = { width: '100%', padding: '14px', border: 'none', background: 'none', color: '#95A5A6', fontSize: '14px', marginTop: '10px', cursor: 'pointer', fontWeight: 'bold' };
-const modalOverlayStyle = { position: 'fixed', inset: 0, zIndex: 3000, backgroundColor: 'rgba(24, 29, 26, 0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center' };
-const modalStyle = { backgroundColor: 'white', padding: '25px', borderRadius: '28px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', margin: '0 20px' };
-const modalSheetStyle = { width: '100%', maxWidth: '520px', backgroundColor: '#FAF9F6', borderTopLeftRadius: '26px', borderTopRightRadius: '26px', padding: '14px 18px 22px 18px', alignSelf: 'flex-end', boxShadow: '0 -10px 40px rgba(0,0,0,0.1)' };
+const btnLabelStyle = { fontSize: '11px', fontWeight: 'bold', color: '#667276', textAlign: 'center' };
+const goButtonStyle = { width: '100%', padding: '10px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '14px' };
+const modalOverlayStyle = { position: 'fixed', inset: 0, zIndex: 3000, backgroundColor: 'rgba(24, 29, 26, 0.42)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' };
+const modalSheetStyle = { width: '100%', maxWidth: '520px', backgroundColor: '#FAF9F6', borderTopLeftRadius: '26px', borderTopRightRadius: '26px', padding: '14px 18px 22px 18px', transition: 'transform 0.4s ease' };
 const modalHandleStyle = { width: '46px', height: '5px', borderRadius: '999px', backgroundColor: '#D5D8D1', margin: '0 auto 14px auto' };
 const modalTitleStyle = { margin: '0 0 16px 0', fontSize: '18px', color: '#243137', fontWeight: 'bold' };
-const modalTextStyle = { margin: '0 0 16px 0', fontSize: '13px', color: '#667276' };
 const filterListStyle = { display: 'flex', flexDirection: 'column', gap: '10px' };
-const filterOptionStyle = { width: '100%', border: '1px solid #E6DED1', backgroundColor: '#F7F4EE', borderRadius: '16px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' };
+const filterOptionStyle = { width: '100%', border: '1px solid #E6DED1', backgroundColor: '#F7F4EE', borderRadius: '16px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', fontWeight: 'bold' };
 const filterOptionActiveStyle = { border: '2px solid #2F5D3A', backgroundColor: '#EEF3EA' };
 const filterDotStyle = { width: '12px', height: '12px', borderRadius: '50%' };
 const modalActionsStyle = { display: 'flex', gap: '10px', marginTop: '18px' };
-const secondaryModalBtnStyle = { flex: 1, border: '1px solid #DDD6CA', backgroundColor: '#ECE9E1', borderRadius: '16px', padding: '14px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' };
-const primaryModalBtnStyle = { flex: 1.3, border: 'none', backgroundColor: '#2F6927', color: '#FFF', borderRadius: '16px', padding: '14px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' };
-const inputStyle = { width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid #ECE7DF', backgroundColor: '#FAF9F6', outline: 'none', fontSize: '15px' };
-const saveBtnStyle = { width: '100%', padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '18px', fontWeight: 'bold', display: 'flex', justifyContent: 'center', gap: '10px', marginTop: '20px', cursor: 'pointer' };
-const serviceToggleBtn = { padding: '10px 14px', borderRadius: '12px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.2s' };
+const primaryModalBtnStyle = { flex: 1.3, border: 'none', backgroundColor: '#2F6927', color: '#FFF', borderRadius: '16px', padding: '14px', fontSize: '14px', fontWeight: 'bold' };
+const secondaryModalBtnStyle = { flex: 1, border: '1px solid #DDD6CA', backgroundColor: '#ECE9E1', borderRadius: '16px', padding: '14px', fontSize: '14px', fontWeight: 'bold' };
+const inputStyle = { width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid #ECE7DF', backgroundColor: '#FAF9F6', outline: 'none', marginBottom: '15px' };
+const saveBtnStyle = { width: '100%', padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '18px', fontWeight: 'bold' };
+const navOptionBtnStyle = { width: '100%', padding: '16px', backgroundColor: 'white', border: '1px solid #E6DED1', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '16px', fontWeight: 'bold', color: '#334247' };
+const cancelBtnStyle = { width: '100%', padding: '14px', border: 'none', background: 'none', color: '#95A5A6', fontSize: '14px', marginTop: '10px', fontWeight: 'bold' };
+const modalStyle = { backgroundColor: 'white', padding: '25px', borderRadius: '28px', width: '90%', maxWidth: '400px', alignSelf: 'center', marginBottom: '100px' };
 
 export default DashboardView;
