@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import {
   Trophy, Clock, Camera, Navigation, Map as MapIcon, Sun, Sunrise, Sunset, Cloud, Star,
-  X, Save, Loader2, Plus, MapPin, Check
+  X, Save, Loader2, Plus, MapPin, Check, Droplet, Zap
 } from 'lucide-react';
 
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
@@ -36,7 +36,6 @@ const createPoiIcon = (color) => new L.Icon({
 
 const redIcon = createPoiIcon('red');
 
-// Färgmappning för kart-ikoner
 const singleServiceIcons = {
   parking: createPoiIcon('green'),
   freshwater: createPoiIcon('blue'),
@@ -110,7 +109,13 @@ function getPoiServiceFlags(poi, normalizedCategory) {
 const ALL_FILTERS_TRUE = { parking: true, graywater: true, blackwater: true, freshwater: true, electricity: true, hidden_gems: true };
 const ALL_SERVICES_FALSE = Object.keys(SERVICE_META_ALL).reduce((acc, key) => ({ ...acc, [key]: false }), {});
 
+// --- KOMPONENT START ---
 function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
+  // HÄR BOR ALLA STATES NU - TRYGGT OCH SÄKERT
+  const [navModalVisible, setNavModalVisible] = useState(false);
+  const [navModalRendered, setNavModalRendered] = useState(false);
+  const [selectedNavPoi, setSelectedNavPoi] = useState(null);
+
   const [topProposal, setTopProposal] = useState(null);
   const [latestEntry, setLatestEntry] = useState(null);
   const [pois, setPois] = useState([]);
@@ -119,8 +124,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   
   const [filterModalRendered, setFilterModalRendered] = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
-  const [showNavModal, setShowNavModal] = useState(false);
-  const [selectedPoiForNav, setSelectedPoiForNav] = useState(null);
 
   const [tempMarker, setTempMarker] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -181,6 +184,30 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     return validPois.filter((poi) => activeKeys.some((key) => poi.serviceFlags[key]));
   }, [validPois, activeFilters]);
 
+  // NAVIGATION MODAL HANDLERS
+  const openNavModal = (poi) => {
+    setSelectedNavPoi(poi);
+    setNavModalRendered(true);
+    setTimeout(() => setNavModalVisible(true), 50);
+  };
+
+  const closeNavModal = () => {
+    setNavModalVisible(false);
+    setTimeout(() => setNavModalRendered(false), 400);
+  };
+
+  const handleNavigate = (type) => {
+    if (!selectedNavPoi) return;
+    const lat = selectedNavPoi.lat || selectedNavPoi.latitude;
+    const lng = selectedNavPoi.lng || selectedNavPoi.longitude;
+    const url = type === 'waze' 
+      ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` 
+      : `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    window.open(url, '_blank');
+    closeNavModal();
+  };
+
+  // FILTER MODAL HANDLERS
   const openFilterModal = () => {
     setFilterModalRendered(true);
     setTimeout(() => setFilterModalVisible(true), 50);
@@ -241,15 +268,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     setIsSaving(false);
   };
 
-  const openInApp = (type) => {
-    if (!selectedPoiForNav) return;
-    const lat = selectedPoiForNav.lat || selectedPoiForNav.latitude;
-    const lng = selectedPoiForNav.lng || selectedPoiForNav.longitude;
-    const url = type === 'waze' ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-    window.open(url, '_blank');
-    setShowNavModal(false);
-  };
-
   if (loading) return <div style={loadingStateStyle}>Startar systemet...</div>;
 
   return (
@@ -275,7 +293,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
                     <strong style={{ color: '#2F5D3A', fontSize: '15px' }}>{poi.name || 'Plats'}</strong>
                     <hr style={{ margin: '8px 0', border: '0', borderTop: '1px solid #E6E2D9' }} />
                     <p style={{ fontSize: '11px', color: '#667276', marginBottom: '10px' }}>{poi.description || poi.address}</p>
-                    <button onClick={() => { setSelectedPoiForNav(poi); setShowNavModal(true); }} style={goButtonStyle}>Åk hit 🚐</button>
+                    <button onClick={() => openNavModal(poi)} style={goButtonStyle}>Åk hit 🚐</button>
                   </div>
                 </Popup>
               </Marker>
@@ -300,7 +318,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
                     <div style={{ minWidth: '160px', textAlign: 'center' }}>
                       <Star size={24} fill="#FFD700" color="#B8860B" style={{ margin: '0 auto 5px auto' }} />
                       <strong style={{ color: '#B8860B', display: 'block' }}>{poi.name}</strong>
-                      <button onClick={() => { setSelectedPoiForNav(poi); setShowNavModal(true); }} style={{...goButtonStyle, marginTop: '10px'}}>Åk hit 🚐</button>
+                      <button onClick={() => openNavModal(poi)} style={{...goButtonStyle, marginTop: '10px'}}>Åk hit 🚐</button>
                     </div>
                   </Popup>
                 </Marker>
@@ -340,8 +358,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             <Camera size={20} color="#4D93C7" />
             <span style={btnLabelStyle}>Ta en bild till Loggboken</span>
           </button>
-          
-          {/* HÄR ÄR MAGIN: Lägg in en post-it lapp i minnet innan vi byter flik */}
           <button style={actionBtnStyle} onClick={() => {
             sessionStorage.setItem('openConvoySearch', 'true');
             setActiveTab('convoy');
@@ -352,7 +368,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         </div>
       </div>
 
-        {/* FILTER MODAL */}
+      {/* FILTER MODAL */}
       {filterModalRendered && (
         <div style={{ ...modalOverlayStyle, opacity: filterModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeFilterModal}>
           <div style={{ ...modalSheetStyle, transform: filterModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)' }} onClick={(e) => e.stopPropagation()}>
@@ -409,18 +425,37 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         </div>
       )}
 
-      {/* NAVIGATION MODAL */}
-      {showNavModal && (
-        <div style={modalOverlayStyle} onClick={() => setShowNavModal(false)}>
-          <div style={modalSheetStyle} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHandleStyle}></div>
-            <h3 style={modalTitleStyle}>Vill du åka till {selectedPoiForNav?.name}?</h3>
-            <p style={modalTextStyle}>Välj din favoritapp för navigering.</p>
+      {/* --- MJUK NAVIGERINGS-MODAL (BOTTEN-SLIDE) --- */}
+      {navModalRendered && (
+        <div style={{ ...modalOverlayStyle, opacity: navModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeNavModal}>
+          <div style={{ 
+            ...modalSheetStyle, 
+            transform: navModalVisible ? 'translateY(0)' : 'translateY(100%)', 
+            transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
+            padding: '20px 24px 40px 24px' 
+          }} onClick={e => e.stopPropagation()}>
+            <div style={modalHandleStyle} />
+            
+            <h3 style={{ ...modalTitleStyle, textAlign: 'center', marginBottom: '10px' }}>
+              Vill du åka till {selectedNavPoi?.name}?
+            </h3>
+            <p style={{ textAlign: 'center', color: '#667276', marginBottom: '25px', fontSize: '14px' }}>
+              Välj din favoritapp för navigering.
+            </p>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <button onClick={() => openInApp('google')} style={navOptionBtnStyle}><Navigation size={20} color="#4285F4" /> Google Maps</button>
-              <button onClick={() => openInApp('waze')} style={navOptionBtnStyle}><Navigation size={20} color="#33CCFF" /> Waze</button>
+              <button onClick={() => handleNavigate('google')} style={navOptionBtnStyle}>
+                <Navigation size={20} color="#4285F4" style={{ marginRight: '12px' }} /> 
+                <span style={{ flex: 1 }}>Google Maps</span>
+              </button>
+
+              <button onClick={() => handleNavigate('waze')} style={navOptionBtnStyle}>
+                <Navigation size={20} color="#33CCFF" style={{ marginRight: '12px' }} /> 
+                <span style={{ flex: 1 }}>Waze</span>
+              </button>
             </div>
-            <button onClick={() => setShowNavModal(false)} style={cancelBtnStyle}>Avbryt</button>
+
+            <button onClick={closeNavModal} style={cancelBtnStyle}>Avbryt</button>
           </div>
         </div>
       )}
@@ -441,27 +476,27 @@ const smallSectionStyle = { cursor: 'pointer' };
 const sectionHeaderStyle = { fontSize: '11px', fontWeight: 'bold', color: '#98A4A5', marginBottom: '7px', display: 'flex', alignItems: 'flex-end', minHeight: '32px', gap: '5px', textTransform: 'uppercase' };
 const miniCardStyle = { backgroundColor: '#FAF9F6', padding: '14px', borderRadius: '20px', minHeight: '44px', display: 'flex', alignItems: 'center', border: '1px solid #EEE7DB' };
 const miniTitleStyle = { margin: 0, fontSize: '14px', color: '#243137', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
-const shortcutTitleStyle = { fontSize: '16px', marginBottom: '15px', color: '#243137' };
+const shortcutTitleStyle = { fontSize: '16px', marginBottom: '15px', color: '#243137', fontWeight: 'bold' };
 const shortcutGridStyle = { display: 'flex', gap: '15px' };
 const actionBtnStyle = { flex: 1, backgroundColor: '#FAF9F6', border: '1px solid #EEE7DB', padding: '14px 10px', borderRadius: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', minHeight: '100px' };
 const btnLabelStyle = { fontSize: '11px', fontWeight: 'bold', color: '#667276', textAlign: 'center' };
 const btnLabelStyleLong = { fontSize: '10px', fontWeight: 'bold', color: '#667276', textAlign: 'center' };
 const goButtonStyle = { width: '100%', padding: '10px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', boxShadow: '0 4px 10px rgba(47,93,58,0.2)' };
 const navOptionBtnStyle = { width: '100%', padding: '16px', backgroundColor: 'white', border: '1px solid #E6DED1', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '16px', fontWeight: 'bold', color: '#334247', cursor: 'pointer' };
-const cancelBtnStyle = { width: '100%', padding: '14px', border: 'none', background: 'none', color: '#95A5A6', fontSize: '14px', marginTop: '10px', cursor: 'pointer' };
+const cancelBtnStyle = { width: '100%', padding: '14px', border: 'none', background: 'none', color: '#95A5A6', fontSize: '14px', marginTop: '10px', cursor: 'pointer', fontWeight: 'bold' };
 const modalOverlayStyle = { position: 'fixed', inset: 0, zIndex: 3000, backgroundColor: 'rgba(24, 29, 26, 0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const modalStyle = { backgroundColor: 'white', padding: '25px', borderRadius: '28px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', margin: '0 20px' };
-const modalSheetStyle = { width: '100%', maxWidth: '520px', backgroundColor: '#FAF9F6', borderTopLeftRadius: '26px', borderTopRightRadius: '26px', padding: '14px 18px 22px 18px', alignSelf: 'flex-end' };
+const modalSheetStyle = { width: '100%', maxWidth: '520px', backgroundColor: '#FAF9F6', borderTopLeftRadius: '26px', borderTopRightRadius: '26px', padding: '14px 18px 22px 18px', alignSelf: 'flex-end', boxShadow: '0 -10px 40px rgba(0,0,0,0.1)' };
 const modalHandleStyle = { width: '46px', height: '5px', borderRadius: '999px', backgroundColor: '#D5D8D1', margin: '0 auto 14px auto' };
-const modalTitleStyle = { margin: '0 0 16px 0', fontSize: '18px', color: '#243137' };
+const modalTitleStyle = { margin: '0 0 16px 0', fontSize: '18px', color: '#243137', fontWeight: 'bold' };
 const modalTextStyle = { margin: '0 0 16px 0', fontSize: '13px', color: '#667276' };
 const filterListStyle = { display: 'flex', flexDirection: 'column', gap: '10px' };
-const filterOptionStyle = { width: '100%', border: '1px solid #E6DED1', backgroundColor: '#F7F4EE', borderRadius: '16px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', fontWeight: 'bold' };
+const filterOptionStyle = { width: '100%', border: '1px solid #E6DED1', backgroundColor: '#F7F4EE', borderRadius: '16px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' };
 const filterOptionActiveStyle = { border: '2px solid #2F5D3A', backgroundColor: '#EEF3EA' };
 const filterDotStyle = { width: '12px', height: '12px', borderRadius: '50%' };
 const modalActionsStyle = { display: 'flex', gap: '10px', marginTop: '18px' };
-const secondaryModalBtnStyle = { flex: 1, border: '1px solid #DDD6CA', backgroundColor: '#ECE9E1', borderRadius: '16px', padding: '14px', fontSize: '14px', fontWeight: 'bold' };
-const primaryModalBtnStyle = { flex: 1.3, border: 'none', backgroundColor: '#2F6927', color: '#FFF', borderRadius: '16px', padding: '14px', fontSize: '14px', fontWeight: 'bold' };
+const secondaryModalBtnStyle = { flex: 1, border: '1px solid #DDD6CA', backgroundColor: '#ECE9E1', borderRadius: '16px', padding: '14px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' };
+const primaryModalBtnStyle = { flex: 1.3, border: 'none', backgroundColor: '#2F6927', color: '#FFF', borderRadius: '16px', padding: '14px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' };
 const inputStyle = { width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid #ECE7DF', backgroundColor: '#FAF9F6', outline: 'none', fontSize: '15px' };
 const saveBtnStyle = { width: '100%', padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '18px', fontWeight: 'bold', display: 'flex', justifyContent: 'center', gap: '10px', marginTop: '20px', cursor: 'pointer' };
 const serviceToggleBtn = { padding: '10px 14px', borderRadius: '12px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.2s' };

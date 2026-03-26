@@ -1,9 +1,10 @@
 {
   "name": "camper-buddy",
-  "version": "4.5.0",
+  "version": "5.5.0",
   "private": true,
   "dependencies": {
-    "@supabase/supabase-js": "^2.99.2",
+    "@supabase/supabase-js": "^2.100.0",
+    "axios": "^1.13.6",
     "leaflet": "^1.9.4",
     "leaflet-geosearch": "^4.4.0",
     "lucide-react": "^0.284.0",

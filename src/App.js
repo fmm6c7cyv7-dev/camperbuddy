@@ -481,7 +481,7 @@ function App() {
             <div style={{ padding: '30px 25px', textAlign: 'center' }}>
               <div style={{ marginBottom: '30px' }}>
                 <p style={{ fontSize: '1.25rem', fontWeight: '700', color: '#334247', margin: '0' }}>
-                  Skriv ditt namn eller ett alias?
+                  Skriv ditt namn eller ett alias, det blir ditt unika användarID som kommer ihåg dina val?
                 </p>
                 <p style={{ fontSize: '0.9rem', color: '#667085', marginTop: '12px', lineHeight: '1.4' }}>
                   (Ditt riktiga namn, husbilens namn eller kanske<br/>husbilens regnummer?)
