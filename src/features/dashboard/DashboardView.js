@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import {
   Trophy, Clock, Camera, Navigation, Map as MapIcon, Sun, Sunrise, Sunset, Cloud, Star,
-  X, Save, Loader2, Plus, MapPin, Check, Droplet, Zap
+  X, Save, Loader2, Plus, MapPin, Check, Droplet, Zap, CloudRain
 } from 'lucide-react';
 
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
@@ -36,6 +36,7 @@ const createPoiIcon = (color) => new L.Icon({
 
 const redIcon = createPoiIcon('red');
 
+// Färgmappning för kart-ikoner
 const singleServiceIcons = {
   parking: createPoiIcon('green'),
   freshwater: createPoiIcon('blue'),
@@ -111,7 +112,6 @@ const ALL_SERVICES_FALSE = Object.keys(SERVICE_META_ALL).reduce((acc, key) => ({
 
 // --- KOMPONENT START ---
 function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
-  // HÄR BOR ALLA STATES NU - TRYGGT OCH SÄKERT
   const [navModalVisible, setNavModalVisible] = useState(false);
   const [navModalRendered, setNavModalRendered] = useState(false);
   const [selectedNavPoi, setSelectedNavPoi] = useState(null);
@@ -134,6 +134,29 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   const [activeFilters, setActiveFilters] = useState({ ...ALL_FILTERS_TRUE });
   const [weather, setWeather] = useState({ temp: '--', sunrise: '--:--', sunset: '--:--', icon: <Sun size={18} color="#D8A826" /> });
 
+  // 1. SMART VÄDERFUNKTION SOM TAR EMOT KOORDINATER
+  const fetchWeatherData = async (lat, lng) => {
+    try {
+      const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code&daily=sunrise,sunset&timezone=auto`);
+      const data = await res.json();
+      const timeConfig = { hour: '2-digit', minute: '2-digit' };
+      
+      const weatherCode = data?.current?.weather_code ?? 0;
+      let WeatherIcon = <Sun size={18} color="#D8A826" />;
+      if (weatherCode > 3) WeatherIcon = <Cloud size={18} color="#8D9998" />;
+      if (weatherCode > 60) WeatherIcon = <CloudRain size={18} color="#4D93C7" />;
+
+      setWeather({
+        temp: Math.round(data?.current?.temperature_2m ?? 0),
+        sunrise: data?.daily?.sunrise?.[0] ? new Date(data.daily.sunrise[0]).toLocaleTimeString('sv-SE', timeConfig) : '--:--',
+        sunset: data?.daily?.sunset?.[0] ? new Date(data.daily.sunset[0]).toLocaleTimeString('sv-SE', timeConfig) : '--:--',
+        icon: WeatherIcon,
+      });
+    } catch (error) {
+      console.error('Kunde inte hämta väder:', error);
+    }
+  };
+
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
@@ -148,16 +171,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
       
       const { data: officialData } = await supabase.from('v_official_pois').select('*');
       setCommunityPois({ officials: officialData || [] });
-
-      const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=59.61&longitude=16.54&current=temperature_2m,weather_code&daily=sunrise,sunset&timezone=auto');
-      const data = await res.json();
-      const timeConfig = { hour: '2-digit', minute: '2-digit' };
-      setWeather({
-        temp: Math.round(data?.current?.temperature_2m ?? 0),
-        sunrise: data?.daily?.sunrise?.[0] ? new Date(data.daily.sunrise[0]).toLocaleTimeString('sv-SE', timeConfig) : '--:--',
-        sunset: data?.daily?.sunset?.[0] ? new Date(data.daily.sunset[0]).toLocaleTimeString('sv-SE', timeConfig) : '--:--',
-        icon: (data?.current?.weather_code ?? 0) > 3 ? <Cloud size={18} color="#8D9998" /> : <Sun size={18} color="#D8A826" />,
-      });
     } catch (error) {
       console.error('Fel i dashboard:', error);
     } finally {
@@ -165,7 +178,25 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     }
   };
 
-  useEffect(() => { fetchDashboardData(); }, []);
+  // 2. KÖR PLATS OCH DATA DIREKT NÄR KOMPONENTEN LADDAS
+  useEffect(() => { 
+    fetchDashboardData(); 
+
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          fetchWeatherData(position.coords.latitude, position.coords.longitude);
+        },
+        (error) => {
+          console.warn("Plats nekad/kunde inte hämtas, använder standard:", error);
+          fetchWeatherData(59.61, 16.54); // Fallback till Västerås
+        },
+        { timeout: 10000 }
+      );
+    } else {
+      fetchWeatherData(59.61, 16.54); // Fallback
+    }
+  }, []);
 
   const validPois = useMemo(() => {
     return pois.map((poi) => {
