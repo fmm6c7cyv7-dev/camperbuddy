@@ -22,11 +22,23 @@ function MapEvents({ onMapClick }) {
   return null;
 }
 
-function ChangeView({ center }) {
+// UPPDATERAD: Använder map.flyTo för en mjuk, animerad autozoom!
+function ChangeView({ center, zoom, trigger }) {
   const map = useMap();
-  useEffect(() => { if (center && center[0] && center[1]) map.setView(center, 13); }, [center, map]);
+  useEffect(() => { 
+    if (center && center[0] && center[1]) {
+      // Flyger mjukt till positionen med rätt zoom. Trigger tvingar den att köra om man klickar på knappen!
+      map.flyTo(center, zoom || 10, { duration: 1.0 }); 
+    }
+  }, [center, zoom, trigger, map]);
   return null;
 }
+
+// NY: Den klassiska blåa Google-pricken
+const blueDotIcon = L.divIcon({
+  html: `<div style="width: 18px; height: 18px; background-color: #4285F4; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 8px rgba(0,0,0,0.4);"></div>`,
+  className: '', iconSize: [18, 18], iconAnchor: [9, 9]
+});
 
 const createPoiIcon = (color) => new L.Icon({
   iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
@@ -121,6 +133,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   const [pois, setPois] = useState([]);
   const [communityPois, setCommunityPois] = useState({ drafts: [], officials: [] });
   const [loading, setLoading] = useState(true);
+  const [flyTrigger, setFlyTrigger] = useState(0);
   
   const [filterModalRendered, setFilterModalRendered] = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
@@ -132,6 +145,11 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   const [isSaving, setIsSaving] = useState(false);
 
   const [activeFilters, setActiveFilters] = useState({ ...ALL_FILTERS_TRUE });
+
+  // --- NYA KART & POSITION STATES ---
+  const [userLocation, setUserLocation] = useState(null);
+  const [mapCenter, setMapCenter] = useState([59.61, 16.54]); // Default Västerås
+  const [mapZoom, setMapZoom] = useState(10); // Standard-zoom för start (50km)
   
   // Väder och Plats States
   const [locationInfo, setLocationInfo] = useState({ name: 'SÖKER POSITION...', coords: '0.0000, 0.0000' });
@@ -140,6 +158,12 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   // --- HÄMTAR VÄDER OCH STADSNAAMN BASERAT PÅ POSITION ---
   const fetchLocationAndWeather = async (lat, lng) => {
     try {
+      // Uppdaterar användarens position
+      const coords = [lat, lng];
+      setUserLocation(coords);
+      setMapCenter(coords);
+      setMapZoom(10); // Zoomnivå 10 = ca 50km
+
       // 1. Hämta Väder (Open-Meteo)
       const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code&daily=sunrise,sunset&timezone=auto`);
       const weatherData = await weatherRes.json();
@@ -152,20 +176,17 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
 
       const timeConfig = { hour: '2-digit', minute: '2-digit' };
       
-      // Realistisk fallback: Om API:et svajar, anta "Växlande molnighet" (kod 2)
       const weatherCode = weatherData?.current?.weather_code ?? 2;
       
-      // Avancerad Ikon-logik för v5.5.0
-      let WeatherIcon = <Sun size={18} color="#D8A826" />; // 0-1: Klart
+      let WeatherIcon = <Sun size={18} color="#D8A826" />; 
       if (weatherCode >= 2 && weatherCode <= 3) {
-        WeatherIcon = <CloudSun size={18} color="#8D9998" />; // 2-3: Växlande
+        WeatherIcon = <CloudSun size={18} color="#8D9998" />; 
       } else if (weatherCode > 3 && weatherCode < 60) {
-        WeatherIcon = <Cloud size={18} color="#8D9998" />; // 45-57: Mulet/Dimma
+        WeatherIcon = <Cloud size={18} color="#8D9998" />; 
       } else if (weatherCode >= 60) {
-        WeatherIcon = <CloudRain size={18} color="#4D93C7" />; // 60+: Regn
+        WeatherIcon = <CloudRain size={18} color="#4D93C7" />; 
       }
 
-      // Uppdatera väder-state
       setWeather({
         temp: Math.round(weatherData?.current?.temperature_2m ?? 0),
         sunrise: weatherData?.daily?.sunrise?.[0] ? new Date(weatherData.daily.sunrise[0]).toLocaleTimeString('sv-SE', timeConfig) : '--:--',
@@ -173,7 +194,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         icon: WeatherIcon,
       });
 
-      // Uppdatera plats-state med proffsig "rese-dator"-look
       setLocationInfo({
         name: cityName.toUpperCase(),
         coords: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`
@@ -181,7 +201,10 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
 
     } catch (error) {
       console.error('Kunde inte hämta plats/väder:', error);
-      // Fail-safe: Om GPS eller API dör, visa Västerås med växlande molnighet
+      // Fallback
+      setUserLocation([59.61, 16.54]);
+      setMapCenter([59.61, 16.54]);
+      setMapZoom(10);
       setLocationInfo({ name: "VÄSTERÅS", coords: "59.6100° N, 16.5400° E" });
       setWeather(prev => ({ ...prev, icon: <CloudSun size={18} color="#8D9998" /> }));
     }
@@ -208,7 +231,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     }
   };
 
-  // --- KÖR POSITION OCH DATA DIREKT NÄR KOMPONENTEN LADDAS ---
   useEffect(() => {
     fetchDashboardData();
 
@@ -219,12 +241,12 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         },
         (error) => {
           console.warn("Plats nekad, använder standard:", error);
-          fetchLocationAndWeather(59.61, 16.54); // Fallback: Västerås
+          fetchLocationAndWeather(59.61, 16.54); 
         },
         { timeout: 10000 }
       );
     } else {
-      fetchLocationAndWeather(59.61, 16.54); // Fallback om webbläsaren saknar stöd
+      fetchLocationAndWeather(59.61, 16.54); 
     }
   }, []);
 
@@ -245,7 +267,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     return validPois.filter((poi) => activeKeys.some((key) => poi.serviceFlags[key]));
   }, [validPois, activeFilters]);
 
-  // NAVIGATION MODAL HANDLERS
   const openNavModal = (poi) => {
     setSelectedNavPoi(poi);
     setNavModalRendered(true);
@@ -268,7 +289,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     closeNavModal();
   };
 
-  // FILTER MODAL HANDLERS
   const openFilterModal = () => {
     setFilterModalRendered(true);
     setTimeout(() => setFilterModalVisible(true), 50);
@@ -335,30 +355,48 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     <>
       <div style={{ padding: '10px 20px 100px 20px' }} className="animate-fade-in">
         
-        {/* --- NY VÄDERBAR MED PLATS --- */}
+        {/* --- VÄDERBAR MED PLATS --- */}
         <div style={weatherCardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 200px' }}>
               <div style={{ backgroundColor: '#EEF2ED', padding: '8px', borderRadius: '12px' }}><MapPin size={16} color="#2F5D3A" /></div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span style={{ fontSize: '13px', fontWeight: '900', color: '#243137', letterSpacing: '0.5px' }}>{locationInfo.name}</span>
                 <span style={{ fontSize: '10px', fontWeight: '600', color: '#98A4A5', fontFamily: 'monospace' }}>{locationInfo.coords}</span>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+            
+            <div style={{ 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              gap: '16px', 
+              alignItems: 'center',
+              justifyContent: 'center', 
+              flex: '1 1 250px' 
+            }}>
               <div style={weatherItemStyle}>{weather.icon} <b style={{ fontSize: '15px' }}>{weather.temp}°C</b></div>
               <div style={{ width: '1px', height: '20px', backgroundColor: '#E6E2D9' }}></div>
               <div style={weatherItemStyle}><Sunrise size={14} color="#CF651F" /> <span style={{fontSize: '12px'}}>{weather.sunrise}</span></div>
               <div style={weatherItemStyle}><Sunset size={14} color="#2F5D3A" /> <span style={{fontSize: '12px'}}>{weather.sunset}</span></div>
             </div>
+            
           </div>
         </div>
 
         <div style={mapContainerStyle}>
-          <MapContainer center={[59.61, 16.54]} zoom={11} style={{ height: '100%', width: '100%', borderRadius: '22px' }} zoomControl={false}>
+          <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%', borderRadius: '22px' }} zoomControl={false}>
+            <ChangeView center={mapCenter} zoom={mapZoom} trigger={flyTrigger} />
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='© OpenStreetMap' />
             <MapEvents onMapClick={handleMapClick} />
             
+            {/* RITAR UT ANVÄNDARENS POSITION MED BLÅ PRICK */}
+            {userLocation && (
+              <Marker position={userLocation} icon={blueDotIcon} zIndexOffset={1000}>
+                <Popup><strong style={{ color: '#4285F4' }}>Du är här</strong></Popup>
+              </Marker>
+            )}
+
             {filteredPois.map((poi) => (
               <Marker key={poi.id} position={[poi.lat, poi.lng]} icon={getMarkerIconForPoi(poi)}>
                 <Popup>
@@ -409,7 +447,23 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             <Star size={13} fill={activeFilters.hidden_gems ? "#FFD700" : "none"} color={activeFilters.hidden_gems ? "#B8860B" : "#A9B4B5"} />
           </div>
         </div>
-          
+        
+        {/* --- NY: CENTRERA KARTA-KNAPPEN --- */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', marginTop: '-10px' }}>
+           <button 
+              onClick={() => { 
+                if(userLocation) { 
+                  // Vi tvingar en liten uppdatering i state för att trigga useEffect i ChangeView
+                  setMapCenter([...userLocation]); 
+                  setMapZoom(10); // Flyger mjukt till 50km radie
+                } 
+              }} 
+              style={centerMapBtnStyle}
+           >
+             <Navigation size={14} /> Centrera karta
+           </button>
+        </div>
+
         <div style={summaryGridStyle}>
           <div style={smallSectionStyle} onClick={() => setActiveTab('convoy')}>
             <div style={sectionHeaderStyle}><Trophy size={14} color="#D8A826" /> LEDER OMRÖSTNINGEN</div>
@@ -549,6 +603,7 @@ const weatherItemStyle = { display: 'flex', alignItems: 'center', gap: '5px' };
 const mapContainerStyle = { height: '350px', width: '100%', borderRadius: '28px', overflow: 'hidden', marginBottom: '25px', position: 'relative', border: '5px solid #F9F7F2' };
 const legendButtonStyle = { position: 'absolute', bottom: '15px', left: '50%', transform: 'translateX(-50%)', zIndex: 2000, backgroundColor: 'rgba(255, 255, 255, 0.96)', padding: '8px 16px', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.12)', cursor: 'pointer' };
 const dot = { width: '10px', height: '10px', borderRadius: '50%' };
+const centerMapBtnStyle = { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FAF9F6', color: '#2F5D3A', border: '1px solid #E5E0D8', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' };
 const summaryGridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' };
 const smallSectionStyle = { cursor: 'pointer' };
 const sectionHeaderStyle = { fontSize: '10px', fontWeight: 'bold', color: '#98A4A5', marginBottom: '7px', display: 'flex', alignItems: 'flex-end', minHeight: '32px', gap: '5px', textTransform: 'uppercase' };
@@ -572,6 +627,7 @@ const modalActionsStyle = { display: 'flex', gap: '10px', marginTop: '18px' };
 const primaryModalBtnStyle = { flex: 1.3, border: 'none', backgroundColor: '#2F6927', color: '#FFF', borderRadius: '16px', padding: '14px', fontSize: '14px', fontWeight: 'bold' };
 const secondaryModalBtnStyle = { flex: 1, border: '1px solid #DDD6CA', backgroundColor: '#ECE9E1', borderRadius: '16px', padding: '14px', fontSize: '14px', fontWeight: 'bold' };
 const inputStyle = { width: '100%', padding: '14px', borderRadius: '12px', border: '2px solid #ECE7DF', backgroundColor: '#FAF9F6', outline: 'none', marginBottom: '15px' };
+const serviceToggleBtn = { padding: '8px 12px', borderRadius: '16px', border: 'none', fontSize: '13px', fontWeight: 'bold', display: 'flex', alignItems: 'center', cursor: 'pointer' };
 const saveBtnStyle = { width: '100%', padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '18px', fontWeight: 'bold' };
 const navOptionBtnStyle = { width: '100%', padding: '16px', backgroundColor: 'white', border: '1px solid #E6DED1', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '16px', fontWeight: 'bold', color: '#334247' };
 const cancelBtnStyle = { width: '100%', padding: '14px', border: 'none', background: 'none', color: '#95A5A6', fontSize: '14px', marginTop: '10px', fontWeight: 'bold' };

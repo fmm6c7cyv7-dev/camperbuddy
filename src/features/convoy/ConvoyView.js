@@ -21,11 +21,23 @@ function MapEvents({ onMapClick }) {
   return null;
 }
 
-function ChangeView({ center }) {
+// UPPDATERAD FÖR ATT HARMONISERA MED DASHBOARD (Mjuk animering)
+function ChangeView({ center, zoom, trigger }) {
   const map = useMap();
-  useEffect(() => { if (center && center[0] && center[1]) map.setView(center, 13); }, [center, map]);
+  useEffect(() => { 
+    if (center && center[0] && center[1]) {
+      // Flyger mjukt till positionen med rätt zoom. Trigger tvingar den att köra om man klickar på knappen!
+      map.flyTo(center, zoom || 10, { duration: 1.0 }); 
+    }
+  }, [center, zoom, trigger, map]);
   return null;
 }
+
+// NY: Den klassiska blåa Google-pricken
+const blueDotIcon = L.divIcon({
+  html: `<div style="width: 18px; height: 18px; background-color: #4285F4; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 8px rgba(0,0,0,0.4);"></div>`,
+  className: '', iconSize: [18, 18], iconAnchor: [9, 9]
+});
 
 const createPoiIcon = (color) => new L.Icon({
   iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
@@ -130,7 +142,8 @@ function ConvoyView({ currentUser }) {
   const [pois, setPois] = useState([]);
   const [communityPois, setCommunityPois] = useState({ officials: [] });
   const [activeFilters, setActiveFilters] = useState({ ...ALL_FILTERS_FALSE });
-  const [poiSearchText, setPoiSearchText] = useState('');
+  const [flyTrigger, setFlyTrigger] = useState(0);
+  
   const [findModalVisible, setFindModalVisible] = useState(false);
   const [findModalRendered, setFindModalRendered] = useState(false);
   
@@ -139,18 +152,39 @@ function ConvoyView({ currentUser }) {
   const [navModalRendered, setNavModalRendered] = useState(false);
   const [selectedNavPoi, setSelectedNavPoi] = useState(null);
 
+  // KART-STATES
+  const [userLocation, setUserLocation] = useState(null);
   const [mapCenter, setMapCenter] = useState([59.61, 16.54]);
+  const [mapZoom, setMapZoom] = useState(13);
+  
   const [tempMarker, setTempMarker] = useState(null);
   const [modalDraft, setModalDraft] = useState({ name: '', lat: null, lng: null });
   const [isConvoyFull, setIsConvoyFull] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showReplaceModal, setShowReplaceModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // SÖK-STATE (Denna var trasig förut, nu är den kopplad!)
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => { 
     fetchProposals(); 
     fetchPois(); 
+    
+    // Hämta position och centrera kartan direkt när fliken öppnas
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const coords = [position.coords.latitude, position.coords.longitude];
+          setUserLocation(coords);
+          setMapCenter(coords);
+          setMapZoom(10); // 50km radie
+        },
+        () => console.warn("Kunde inte hämta plats för ConvoyView"),
+        { timeout: 5000 }
+      );
+    }
+
     if (sessionStorage.getItem('openConvoySearch') === 'true') {
         sessionStorage.removeItem('openConvoySearch');
         setTimeout(() => openFindModal(), 300);
@@ -181,27 +215,40 @@ function ConvoyView({ currentUser }) {
     }).filter(Boolean);
   }, [pois]);
 
+  // ÅTERSTÄLLD: Filtrerar nu korrekt baserat på `searchQuery` OCH filter-knapparna!
   const filteredPois = useMemo(() => {
     const activeKeys = Object.entries(activeFilters).filter(([k, v]) => v && k !== 'hidden_gems').map(([k]) => k);
-    if (activeKeys.length === 0 && !poiSearchText.trim()) return [];
+    if (activeKeys.length === 0 && !searchQuery.trim()) return [];
+    
     return validPois.filter((poi) => {
-      const matchesSearch = !poiSearchText || poi.name?.toLowerCase().includes(poiSearchText.toLowerCase());
+      const matchesSearch = !searchQuery || poi.name?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesFilter = activeKeys.length === 0 || activeKeys.some(key => poi.serviceFlags[key]);
       return matchesSearch && matchesFilter;
     });
-  }, [validPois, activeFilters, poiSearchText]);
+  }, [validPois, activeFilters, searchQuery]);
 
   const currentHitsCount = useMemo(() => {
     const regularHits = filteredPois.length;
-    const gemsHits = activeFilters.hidden_gems ? communityPois.officials.filter(p => !poiSearchText || p.name?.toLowerCase().includes(poiSearchText.toLowerCase())).length : 0;
+    const gemsHits = activeFilters.hidden_gems ? communityPois.officials.filter(p => !searchQuery || p.name?.toLowerCase().includes(searchQuery.toLowerCase())).length : 0;
     return regularHits + gemsHits;
-  }, [filteredPois, activeFilters.hidden_gems, communityPois.officials, poiSearchText]);
+  }, [filteredPois, activeFilters.hidden_gems, communityPois.officials, searchQuery]);
 
   const getMarkerIconForPoi = (poi) => {
     const keys = Object.keys(SERVICE_META).filter(k => poi.serviceFlags[k]);
     if (keys.length === 1) return singleServiceIcons[keys[0]] || singleServiceIcons.default;
     if (keys.length > 1) return buildMultiServiceIcon(keys);
     return singleServiceIcons[poi.normalizedCategory] || singleServiceIcons.default;
+  };
+
+  // ÅTERSTÄLLD: Funktion för att rösta på förslag
+  const handleVote = async (id, isUpvote) => {
+    const proposal = proposals.find((p) => p.id === id);
+    if (!proposal) return;
+    const updatePayload = isUpvote 
+      ? { votes_up: (proposal.votes_up || 0) + 1 }
+      : { votes_down: (proposal.votes_down || 0) + 1 };
+    await supabase.from('proposals').update(updatePayload).eq('id', id);
+    fetchProposals();
   };
 
   // HANDLERS
@@ -255,11 +302,20 @@ function ConvoyView({ currentUser }) {
   const handleReplace = async (id) => { await supabase.from('proposals').delete().eq('id', id); handleCreateNew(); setShowReplaceModal(false); };
 
   return (
-    <div style={{ padding: '10px 20px 100px 20px' }}>
+    <div style={{ padding: '10px 20px 100px 20px', boxSizing: 'border-box' }}>
       <div style={mapWrapperStyle}>
-        <MapContainer center={mapCenter} zoom={13} style={{ height: '100%' }} zoomControl={false}>
-          <ChangeView center={mapCenter} /><MapEvents onMapClick={handleMapClick} /><TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%', borderRadius: '22px' }} zoomControl={false}>
+            <ChangeView center={mapCenter} zoom={mapZoom} trigger={flyTrigger} />
+          <MapEvents onMapClick={handleMapClick} />
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           
+          {/* RITA UT ANVÄNDARENS POSITION */}
+          {userLocation && (
+              <Marker position={userLocation} icon={blueDotIcon} zIndexOffset={1000}>
+                <Popup><strong style={{ color: '#4285F4' }}>Du är här</strong></Popup>
+              </Marker>
+          )}
+
           {proposals.map(p => {
              if (!p.latitude || !p.longitude) return null;
              return <Marker key={p.id} position={[parseFloat(p.latitude), parseFloat(p.longitude)]} icon={redIcon}><Popup><strong>{p.name}</strong></Popup></Marker>
@@ -305,21 +361,59 @@ function ConvoyView({ currentUser }) {
 
           {tempMarker && <Marker position={tempMarker} icon={redIcon}><Popup autoOpen><button onClick={()=>triggerAddFlow(modalDraft)} style={goButtonStyle}>➕ Föreslå</button></Popup></Marker>}
         </MapContainer>
-        <div style={legendButtonStyle} onClick={openFindModal}><Search size={16} style={{marginRight:'8px'}}/><span>Hitta platser & POIs</span></div>
+        <div style={legendButtonStyle} onClick={openFindModal}><Search size={16} style={{marginRight:'8px', flexShrink: 0}}/><span>Hitta platser & POIs</span></div>
       </div>
 
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <div style={{ position: 'relative', flex: 1 }}><Search size={18} style={{ position: 'absolute', left: '12px', top: '15px', color: '#999' }} /><input type="text" placeholder="Sök förslag..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={searchInputStyle} /></div>
-        <button onClick={() => triggerAddFlow({ name: searchQuery, lat: null, lng: null })} style={addBtnStyle}><Plus color="white" /></button>
+      {/* --- CENTRERA KARTA-KNAPPEN --- */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', marginTop: '-10px' }}>
+          <button 
+            onClick={() => { if(userLocation) { setMapCenter([...userLocation]); setMapZoom(10); } }} 
+            style={centerMapBtnStyle}
+          >
+            <Navigation size={14} /> Centrera karta
+          </button>
       </div>
 
+      {/* --- SÖKFÄLTET (Nu fungerar det med filtreringen) --- */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', width: '100%', boxSizing: 'border-box' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+          <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#999', flexShrink: 0 }} />
+          <input 
+            type="text" 
+            placeholder="Sök plats eller POI..." 
+            value={searchQuery} 
+            onChange={(e) => setSearchQuery(e.target.value)} 
+            style={searchInputStyle} 
+          />
+        </div>
+        <button onClick={() => triggerAddFlow({ name: searchQuery, lat: null, lng: null })} style={addBtnStyle}>
+          <Plus color="white" />
+        </button>
+      </div>
+
+      {/* --- LISTA MED FÖRSLAG (ÅTERSTÄLLD MED RÖSTNING) --- */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div style={countInfoStyle}>{proposals.length} av 5 förslag använda</div>
         {proposals.map(p => (
           <div key={p.id} style={proposalCardStyle}>
-            <div style={{display:'flex', justifyContent:'space-between'}}>
-              <div><h3 style={{margin:0, fontSize:'18px'}}>{p.name}</h3><span style={{fontSize:'12px', color:'#999'}}>Tips från {p.created_by_name}</span></div>
-              <button onClick={()=>{if(window.confirm("Ta bort?")){supabase.from('proposals').delete().eq('id',p.id).then(()=>fetchProposals());}}} style={deleteBtnStyle}><Trash2 size={18}/></button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', color: '#243137' }}>{p.name}</h3>
+                <span style={{ fontSize: '12px', color: '#98A4A5' }}>Tips från {p.created_by_name}</span>
+              </div>
+              
+              {/* ÅTERSTÄLLD RÖSTNING */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button onClick={() => handleVote(p.id, true)} style={{ ...voteBtnStyle, backgroundColor: '#E8F5E9', color: '#2e7d32' }}>
+                  <ThumbsUp size={16} style={{ marginRight: '4px' }} /> {p.votes_up || 0}
+                </button>
+                <button onClick={() => handleVote(p.id, false)} style={{ ...voteBtnStyle, backgroundColor: '#FFEBEE', color: '#c62828' }}>
+                  <ThumbsDown size={16} style={{ marginRight: '4px' }} /> {p.votes_down || 0}
+                </button>
+                <button onClick={()=>{if(window.confirm("Ta bort förslag?")){supabase.from('proposals').delete().eq('id',p.id).then(()=>fetchProposals());}}} style={deleteBtnStyle}>
+                  <Trash2 size={18}/>
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -379,13 +473,15 @@ function ConvoyView({ currentUser }) {
 
 // --- STYLES ---
 const mapWrapperStyle = { height: '350px', borderRadius: '28px', overflow: 'hidden', marginBottom: '20px', border: '5px solid #F9F7F2', position: 'relative' };
-const legendButtonStyle = { position: 'absolute', bottom: '15px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, backgroundColor: 'white', padding: '12px 20px', borderRadius: '999px', display: 'flex', alignItems: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', cursor: 'pointer', fontWeight: '800' };
-const searchInputStyle = { width: '100%', padding: '14px 14px 14px 15px', borderRadius: '16px', border: '2px solid #ECE7DF', outline: 'none', backgroundColor: '#FAF9F6', boxSizing: 'border-box' };
-const addBtnStyle = { backgroundColor: '#2F5D3A', border: 'none', borderRadius: '16px', width: '52px', height: '52px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const legendButtonStyle = { position: 'absolute', bottom: '15px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, backgroundColor: 'white', padding: '12px 20px', borderRadius: '999px', display: 'flex', alignItems: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', cursor: 'pointer', fontWeight: '800', whiteSpace: 'nowrap' };
+const centerMapBtnStyle = { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FAF9F6', color: '#2F5D3A', border: '1px solid #E5E0D8', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' };
+const searchInputStyle = { width: '100%', padding: '14px 14px 14px 38px', borderRadius: '16px', border: '2px solid #ECE7DF', outline: 'none', backgroundColor: '#FAF9F6', boxSizing: 'border-box' };
+const addBtnStyle = { backgroundColor: '#2F5D3A', border: 'none', borderRadius: '16px', width: '52px', height: '52px', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const countInfoStyle = { fontSize: '11px', fontWeight: '800', color: '#98A4A5', textAlign: 'right', textTransform: 'uppercase', marginBottom: '5px' };
 const proposalCardStyle = { backgroundColor: '#FAF9F6', padding: '20px', borderRadius: '24px', border: '1px solid #EEE7DB' };
+const voteBtnStyle = { display: 'flex', alignItems: 'center', border: 'none', padding: '6px 12px', borderRadius: '12px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' };
 const goButtonStyle = { width: '100%', padding: '12px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '14px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', boxShadow: '0 4px 10px rgba(47,93,58,0.2)' };
-const deleteBtnStyle = { background: 'none', border: 'none', color: '#98A4A5', cursor: 'pointer' };
+const deleteBtnStyle = { background: 'none', border: 'none', color: '#98A4A5', cursor: 'pointer', marginLeft: '8px' };
 const modalOverlayStyle = { position: 'fixed', inset: 0, zIndex: 3000, backgroundColor: 'rgba(24, 29, 26, 0.42)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' };
 const modalSheetStyle = { width: '100%', maxWidth: '520px', backgroundColor: '#FAF9F6', borderTopLeftRadius: '32px', borderTopRightRadius: '32px', padding: '24px', boxSizing: 'border-box' };
 const modalStyle = { backgroundColor: 'white', padding: '24px', borderRadius: '28px', width: '90%', maxWidth: '400px' };
