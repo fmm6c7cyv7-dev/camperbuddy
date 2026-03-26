@@ -17,6 +17,7 @@ import {
   Loader2,
   LocateFixed,
   Star, 
+  LogOut, // Lagt till för test-knappen
 } from 'lucide-react';
 
 import DashboardView from './features/dashboard/DashboardView';
@@ -38,7 +39,8 @@ function CamperBuddyLogo() {
   );
 }
 
-function GlobalHeader({ activeTab }) {
+// --- MODIFIERAD HEADER MED TEST-KNAPP ---
+function GlobalHeader({ activeTab, currentUser, onLogout }) {
   const tabLabel =
     activeTab === 'home' ? 'Hem' : activeTab === 'convoy' ? 'Konvoj' : 'Logg';
 
@@ -48,6 +50,25 @@ function GlobalHeader({ activeTab }) {
         <CamperBuddyLogo />
 
         <div style={headerRightStyle}>
+          {/* TEST-KNAPP: Visas bara om vi är inloggade för att kunna hoppa tillbaka till onboarding */}
+          {currentUser && (
+            <button 
+              onClick={onLogout}
+              style={{ 
+                background: 'none', 
+                border: 'none', 
+                marginRight: '10px', 
+                color: '#95A5A6',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+              title="Logga ut (Endast för test)"
+            >
+              <LogOut size={18} />
+            </button>
+          )}
+          
           <div style={headerPillStyle}>
             <MapPin size={15} color="#2F5D3A" />
             <span>{tabLabel}</span>
@@ -78,9 +99,11 @@ function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingName, setOnboardingName] = useState('');
   
-  // Nya states för inloggningen
+  // --- NYA STATES FÖR PIN-KOD ---
+  const [onboardingPin, setOnboardingPin] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
 
   const watchIdRef = useRef(null);
   const stopTimerRef = useRef(null);
@@ -111,11 +134,27 @@ function App() {
     }
   }, []);
 
-  // --- NY INLOGGNINGSLOGIK MED SUPABASE ---
+  // --- FUNKTION FÖR ATT NOLLSTÄLLA (TEST) ---
+  const handleLogout = () => {
+    localStorage.removeItem('camperbuddy_profile');
+    setCurrentUser(null);
+    setOnboardingName('');
+    setOnboardingPin('');
+    setLoginError('');
+    setShowOnboarding(true);
+  };
+
+  // --- UPPDATERAD INLOGGNINGSLOGIK MED PIN-KOD ---
   const saveUserProfile = async () => {
-    const cleanName = onboardingName.trim();
+    const cleanName = onboardingName.replace(/\s+/g, ''); // Tar bort ALLA mellanslag
+    const cleanPin = onboardingPin.trim();
+
     if (cleanName.length < 2) {
       setLoginError("Namnet måste vara minst 2 tecken.");
+      return;
+    }
+    if (cleanPin.length !== 4) {
+      setLoginError("PIN-koden måste vara 4 siffror.");
       return;
     }
 
@@ -123,39 +162,47 @@ function App() {
     setLoginError('');
 
     try {
-      // 1. Kolla om namnet redan finns i databasen (case insensitive)
+      // 1. Kolla om namnet finns
       const { data: existingUser, error: searchError } = await supabase
         .from('buddies')
         .select('*')
         .ilike('username', cleanName)
-        .single();
+        .maybeSingle();
 
       if (existingUser) {
-        // Användaren fanns! Vi loggar in.
-        const userProfile = { id: existingUser.id, name: existingUser.username };
-        localStorage.setItem('camperbuddy_profile', JSON.stringify(userProfile));
-        setCurrentUser(userProfile);
-        setShowOnboarding(false);
+        // Alias finns! Kolla om PIN matchar
+        if (existingUser.pin === cleanPin) {
+          const userProfile = { id: existingUser.id, name: existingUser.username };
+          localStorage.setItem('camperbuddy_profile', JSON.stringify(userProfile));
+          setCurrentUser(userProfile);
+          setShowOnboarding(false);
+        } else {
+          setLoginError("Fel PIN-kod för detta alias.");
+          setNeedsConfirmation(false);
+        }
       } else {
-        // Användaren fanns inte, vi skapar den.
-        const { data: newUser, error: insertError } = await supabase
-          .from('buddies')
-          .insert([{ username: cleanName }])
-          .select()
-          .single();
-
-        if (insertError) {
-          // Om unicitetsregeln i databasen kickar in (någon annan tog exakt samma namn precis nu)
-          if (insertError.code === '23505') {
-             setLoginError("Detta namn blev precis upptaget, testa ett annat!");
-          } else {
-             setLoginError("Något gick fel vid skapandet. Försök igen.");
-          }
+        // Alias finns INTE. 
+        // Om användaren inte har bekräftat än, visa frågan:
+        if (!needsConfirmation) {
+          setLoginError("Aliaset finns inte. Vill du skapa en ny buddy?");
+          setNeedsConfirmation(true);
           setIsLoggingIn(false);
           return;
         }
 
-        // Ny användare skapad och redo!
+        // Om de trycker igen (efter bekräftelse), skapa kontot:
+        const { data: newUser, error: insertError } = await supabase
+          .from('buddies')
+          .insert([{ username: cleanName, pin: cleanPin }])
+          .select()
+          .single();
+
+        if (insertError) {
+          setLoginError("Kunde inte skapa profil. Försök igen.");
+          setNeedsConfirmation(false);
+          return;
+        }
+
         const userProfile = { id: newUser.id, name: newUser.username };
         localStorage.setItem('camperbuddy_profile', JSON.stringify(userProfile));
         setCurrentUser(userProfile);
@@ -163,12 +210,13 @@ function App() {
       }
     } catch (err) {
       console.error(err);
-      setLoginError("Ett oväntat fel uppstod. Kontrollera din uppkoppling.");
+      setLoginError("Ett oväntat fel uppstod.");
     } finally {
       setIsLoggingIn(false);
     }
   };
 
+  // --- BEHÅLLER ALL DIN BEFINTLIGA LOGIK HÄRIFRÅN ---
   const resetComposer = () => {
     setComposerDraft({
       ...emptyComposer,
@@ -392,20 +440,27 @@ function App() {
   const handleSaveComposer = async () => {
     if (composerDraft.title.trim() === '' || composerDraft.content.trim() === '') return;
     setComposerUploading(true);
+    
     try {
       if (composerDraft.isGoldenStar) await handleStarRating();
+      
       let finalImageUrl = composerDraft.existingImageUrl || null;
+      
       if (composerDraft.image) {
         const file = composerDraft.image;
         const fileExt = file.name?.split('.').pop() || 'jpg';
         const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
         const { error: uploadError } = await supabase.storage.from('logbook_images').upload(fileName, file);
+        
         if (!uploadError) {
           const { data } = supabase.storage.from('logbook_images').getPublicUrl(fileName);
           finalImageUrl = data.publicUrl;
         }
       }
+      
+      // HÄR ÄR UPPDATERINGEN: buddy_id är nu med!
       const payload = {
+        buddy_id: currentUser?.id || null, // Sparar användarens unika ID
         title: composerDraft.title,
         content: composerDraft.content,
         location: composerDraft.location || 'Okänd plats',
@@ -413,21 +468,28 @@ function App() {
         image_url: finalImageUrl,
         is_golden_star: composerDraft.isGoldenStar, 
       };
+      
       let error = null;
+      
       if (composerDraft.id) {
+        // Uppdaterar befintligt inlägg
         const result = await supabase.from('logbook').update(payload).eq('id', composerDraft.id);
         error = result.error;
       } else {
+        // Skapar nytt inlägg
         const result = await supabase.from('logbook').insert([payload]);
         error = result.error;
       }
+      
       if (!error) {
         closeComposer();
         setActiveTab('logbook');
         setLogbookRefreshKey((prev) => prev + 1);
+      } else {
+        console.error("Fel vid sparande till Supabase:", error);
       }
     } catch (error) {
-      console.error(error);
+      console.error("Oväntat fel i handleSaveComposer:", error);
     } finally {
       setComposerUploading(false);
     }
@@ -437,14 +499,14 @@ function App() {
     switch (activeTab) {
       case 'home': return <DashboardView setActiveTab={setActiveTab} onOpenLogbookPhotoFlow={openDashboardPhotoFlow} currentUser={currentUser} />;
       case 'convoy': return <ConvoyView currentUser={currentUser} />;
-      case 'logbook': return <LogbookView onOpenComposer={openComposerFromLogbook} onEditEntry={openEditComposer} refreshKey={logbookRefreshKey} />;
+      case 'logbook': return <LogbookView onOpenComposer={openComposerFromLogbook} onEditEntry={openEditComposer} refreshKey={logbookRefreshKey} currentUser={currentUser} />; // La till currentUser här för framtida filtrering
       default: return <DashboardView setActiveTab={setActiveTab} onOpenLogbookPhotoFlow={openDashboardPhotoFlow} currentUser={currentUser} />;
     }
   };
 
   return (
     <div style={appShellStyle}>
-      {/* --- ONBOARDING (VÄLKOMSTSKÄRM) --- */}
+      {/* --- MODIFIERAD ONBOARDING (ALIAS + PIN) --- */}
       {showOnboarding && (
         <div style={onboardingOverlayStyle}>
           <div style={{
@@ -456,7 +518,6 @@ function App() {
             width: '90%',
             maxWidth: '400px'
           }}>
-            {/* HEADER MED DUBBELT SÅ STOR LOGGA/IKON */}
             <div style={{
               backgroundColor: '#f8f9f8',
               padding: '40px 20px',
@@ -469,44 +530,74 @@ function App() {
                 src="/icons/icon-512.png" 
                 alt="CamperBUDDY" 
                 style={{ 
-                  height: '180px', 
-                  width: '180px', 
-                  borderRadius: '35px',
-                  boxShadow: '0 8px 25px rgba(0,0,0,0.12)' 
+                  height: '140px', 
+                  width: '140px', 
+                  borderRadius: '30px',
+                  boxShadow: '0 8px 25px rgba(0,0,0,0.1)' 
                 }} 
               />
             </div>
 
-            {/* NY FRÅGA OCH INPUT */}
             <div style={{ padding: '30px 25px', textAlign: 'center' }}>
-              <div style={{ marginBottom: '30px' }}>
-                <p style={{ fontSize: '1.25rem', fontWeight: '700', color: '#334247', margin: '0' }}>
-                  Skriv ditt namn eller ett alias, det blir ditt unika användarID som kommer ihåg dina val?
+              <div style={{ marginBottom: '25px' }}>
+                <p style={{ fontSize: '1.2rem', fontWeight: '700', color: '#334247', margin: '0' }}>
+                  Vem är du bakom ratten?
                 </p>
-                <p style={{ fontSize: '0.9rem', color: '#667085', marginTop: '12px', lineHeight: '1.4' }}>
-                  (Ditt riktiga namn, husbilens namn eller kanske<br/>husbilens regnummer?)
+                <p style={{ fontSize: '0.85rem', color: '#667085', marginTop: '8px', lineHeight: '1.4' }}>
+                  Välj ett alias och en 4-siffrig kod.
                 </p>
               </div>
 
+              {/* INPUT: ALIAS */}
+<input
+  type="text"
+  placeholder="Ditt Alias (t.ex. BodilBobil)"
+  value={onboardingName}
+  onChange={(e) => {
+    // Tar bort alla mellanslag direkt vid inmatning (regex: \s+)
+    const val = e.target.value.replace(/\s+/g, '');
+    setOnboardingName(val);
+    
+    // Om du la till 'setNeedsConfirmation' state:
+    if (typeof setNeedsConfirmation === 'function') {
+      setNeedsConfirmation(false);
+    }
+  }}
+  style={{
+    ...inputStyle,
+    width: '100%',
+    padding: '16px',
+    fontSize: '1rem',
+    borderRadius: '12px',
+    border: '2px solid #edf2f7',
+    textAlign: 'center',
+    marginBottom: '12px',
+    outline: 'none'
+  }}
+/>
+
+              {/* INPUT: PIN-KOD */}
               <input
-                type="text"
-                placeholder="T.ex. HusbilsLeffe"
-                value={onboardingName}
-                onChange={(e) => setOnboardingName(e.target.value)}
+                type="tel"
+                pattern="[0-9]*"
+                maxLength="4"
+                placeholder="4-siffrig PIN-kod"
+                value={onboardingPin}
+                onChange={(e) => setOnboardingPin(e.target.value.replace(/\D/g, ''))}
                 style={{
                   ...inputStyle,
                   width: '100%',
                   padding: '16px',
-                  fontSize: '1.1rem',
+                  fontSize: '1rem',
                   borderRadius: '12px',
-                  border: loginError ? '2px solid #E74C3C' : '2px solid #edf2f7',
+                  border: '2px solid #edf2f7',
                   textAlign: 'center',
-                  marginBottom: loginError ? '8px' : '20px',
-                  outline: 'none'
+                  marginBottom: '20px',
+                  outline: 'none',
+                  letterSpacing: '8px'
                 }}
               />
               
-              {/* Felmeddelande visas här om något går snett */}
               {loginError && (
                 <p style={{ color: '#E74C3C', fontSize: '13px', fontWeight: 'bold', marginBottom: '15px' }}>
                   {loginError}
@@ -514,32 +605,33 @@ function App() {
               )}
 
               <button
-                onClick={saveUserProfile}
-                style={{
-                  ...primaryBtn,
-                  width: '100%',
-                  padding: '18px',
-                  borderRadius: '14px',
-                  fontSize: '1.2rem',
-                  fontWeight: '700',
-                  boxShadow: '0 4px 15px rgba(139, 163, 147, 0.4)',
-                  opacity: onboardingName.trim() && !isLoggingIn ? 1 : 0.6,
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  gap: '10px'
-                }}
-                disabled={!onboardingName.trim() || isLoggingIn}
-              >
-                {isLoggingIn ? <Loader2 className="animate-spin" size={24} /> : "Starta resan 🏕️"}
-              </button>
+  onClick={saveUserProfile}
+  style={{
+    ...primaryBtn,
+    backgroundColor: needsConfirmation ? '#4D8A57' : '#2F5D3A', // Lite ljusare grön vid bekräftelse
+    opacity: (onboardingName.trim() && onboardingPin.length === 4 && !isLoggingIn) ? 1 : 0.6,
+  }}
+  disabled={!onboardingName.trim() || onboardingPin.length !== 4 || isLoggingIn}
+>
+  {isLoggingIn ? (
+    <Loader2 className="animate-spin" size={24} />
+  ) : needsConfirmation ? (
+    "Ja, skapa ny buddy! 🏕️" 
+  ) : (
+    "Starta resan 🏕️"
+  )}
+</button>
             </div>
           </div>
         </div>
       )}
 
       {/* --- RESTEN AV APPEN --- */}
-      <GlobalHeader activeTab={activeTab} />
+      <GlobalHeader 
+        activeTab={activeTab} 
+        currentUser={currentUser} 
+        onLogout={handleLogout} 
+      />
 
       <main style={mainContentStyle}>{renderContent()}</main>
 
@@ -570,6 +662,7 @@ function App() {
         </div>
       )}
 
+      {/* Media Picker & Composer Modals fortsätter härifrån... (oförändrat) */}
       {showMediaPicker && (
         <div style={modalOverlayStyle} onClick={closeMediaPicker}>
           <div style={actionSheetStyle} className="animate-slide-up" onClick={(e) => e.stopPropagation()}>
@@ -635,7 +728,7 @@ function App() {
   );
 }
 
-// --- STYLES ---
+// --- STYLES --- (Inga ändringar förutom renderContent-switch i return)
 const appShellStyle = { backgroundColor: '#F5F2ED', minHeight: '100vh' };
 const onboardingOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(245, 242, 237, 0.98)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' };
 const onboardingCardStyle = { backgroundColor: '#FAF9F6', borderRadius: '34px', width: '100%', maxWidth: '450px', boxShadow: '0 24px 60px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column' };
@@ -656,13 +749,21 @@ const primaryBtn = { backgroundColor: '#2F5D3A', color: 'white', border: 'none',
 const secondaryBtn = { flex: 1, backgroundColor: '#EAE5DD', color: '#7C8A8D', border: 'none', borderRadius: '28px', fontWeight: 500, fontSize: '22px', cursor: 'pointer' };
 const modalOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(24, 29, 26, 0.56)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, padding: '20px' };
 const modalStyle = { backgroundColor: '#FAF9F6', padding: '26px', borderRadius: '28px', width: '100%', maxWidth: '430px', boxShadow: '0 24px 60px rgba(0,0,0,0.18)' };
-const modalHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' };
-const sheetTitleStyle = { margin: 0, color: '#2F5D3A', fontSize: '18px', fontWeight: 800 };
+// Lägg till denna i din STYLES-lista längst ner:
+const inputStyle = { 
+  width: '100%', 
+  padding: '14px 14px', 
+  borderRadius: '14px', 
+  border: '2px solid #ECE7DF', 
+  marginBottom: '12px', 
+  fontSize: '16px', 
+  boxSizing: 'border-box', 
+  backgroundColor: '#FBFAF7', 
+  color: '#172026' 
+};
 const iconOnlyBtnStyle = { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#172026' };
-const inputStyle = { width: '100%', padding: '14px 14px', borderRadius: '14px', border: '2px solid #ECE7DF', marginBottom: '12px', fontSize: '16px', boxSizing: 'border-box', backgroundColor: '#FBFAF7', color: '#172026' };
 const locationBtnStyle = { width: '100%', marginTop: '-2px', marginBottom: '12px', padding: '12px 14px', borderRadius: '14px', border: '1px solid #DCE5DA', backgroundColor: '#EEF3EA', color: '#2F5D3A', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' };
 const mediaBtnStyle = { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '13px', backgroundColor: '#ECE9E1', borderRadius: '14px', cursor: 'pointer', color: '#667276', fontWeight: 'bold', border: '1px solid #DDD7CC' };
-const selectedFileBadge = { backgroundColor: '#E7EFE3', color: '#2F5D3A', padding: '10px 12px', borderRadius: '12px', fontSize: '12px', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' };
 const saveBtnStyle = { width: '100%', padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '18px', fontWeight: 'bold', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', cursor: 'pointer' };
 const actionSheetStyle = { width: '100%', maxWidth: '430px', backgroundColor: '#FAF9F6', borderRadius: '28px', padding: '14px 18px 18px 18px', boxShadow: '0 24px 60px rgba(0,0,0,0.18)' };
 const sheetHandleStyle = { width: '48px', height: '5px', borderRadius: '999px', backgroundColor: '#D9DDD6', margin: '0 auto 16px auto' };
