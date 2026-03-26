@@ -21,19 +21,16 @@ function MapEvents({ onMapClick }) {
   return null;
 }
 
-// UPPDATERAD FÖR ATT HARMONISERA MED DASHBOARD (Mjuk animering)
 function ChangeView({ center, zoom, trigger }) {
   const map = useMap();
   useEffect(() => { 
     if (center && center[0] && center[1]) {
-      // Flyger mjukt till positionen med rätt zoom. Trigger tvingar den att köra om man klickar på knappen!
-      map.flyTo(center, zoom || 10, { duration: 1.0 }); 
+      map.flyTo(center, zoom || 10, { duration: 1.5 }); 
     }
   }, [center, zoom, trigger, map]);
   return null;
 }
 
-// NY: Den klassiska blåa Google-pricken
 const blueDotIcon = L.divIcon({
   html: `<div style="width: 18px; height: 18px; background-color: #4285F4; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 8px rgba(0,0,0,0.4);"></div>`,
   className: '', iconSize: [18, 18], iconAnchor: [9, 9]
@@ -143,16 +140,15 @@ function ConvoyView({ currentUser }) {
   const [communityPois, setCommunityPois] = useState({ officials: [] });
   const [activeFilters, setActiveFilters] = useState({ ...ALL_FILTERS_FALSE });
   const [flyTrigger, setFlyTrigger] = useState(0);
+  const [focusMarker, setFocusMarker] = useState(null); 
   
   const [findModalVisible, setFindModalVisible] = useState(false);
   const [findModalRendered, setFindModalRendered] = useState(false);
   
-  // NAV MODAL STATES
   const [navModalVisible, setNavModalVisible] = useState(false);
   const [navModalRendered, setNavModalRendered] = useState(false);
   const [selectedNavPoi, setSelectedNavPoi] = useState(null);
 
-  // KART-STATES
   const [userLocation, setUserLocation] = useState(null);
   const [mapCenter, setMapCenter] = useState([59.61, 16.54]);
   const [mapZoom, setMapZoom] = useState(13);
@@ -164,26 +160,35 @@ function ConvoyView({ currentUser }) {
   const [showReplaceModal, setShowReplaceModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  // SÖK-STATES OCH NOMINATIM RESULTS
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
 
+  // --- EFFEKT VID START ---
   useEffect(() => { 
     fetchProposals(); 
     fetchPois(); 
     
-    // Hämta position och centrera kartan direkt när fliken öppnas
-    if ("geolocation" in navigator) {
+    // Kolla om vi ska fokusera på en specifik plats (från Dashboard)
+    const convoyFocusRaw = sessionStorage.getItem('openConvoyFocus');
+    if (convoyFocusRaw) {
+      sessionStorage.removeItem('openConvoyFocus');
+      const focusData = JSON.parse(convoyFocusRaw);
+      if (focusData.coords) {
+          setMapCenter(focusData.coords);
+          setMapZoom(focusData.zoom || 14);
+          setFlyTrigger(prev => prev + 1);
+      }
+    } else if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const coords = [position.coords.latitude, position.coords.longitude];
           setUserLocation(coords);
           setMapCenter(coords);
-          setMapZoom(10); // 50km radie
-          setFlyTrigger(prev => prev + 1); // Tvingar kartan att animera till positionen vid start
+          setMapZoom(10); 
+          setFlyTrigger(prev => prev + 1);
         },
-        () => console.warn("Kunde inte hämta plats för ConvoyView"),
+        () => console.warn("Kunde inte hämta plats"),
         { timeout: 5000 }
       );
     }
@@ -194,15 +199,13 @@ function ConvoyView({ currentUser }) {
     }
   }, []);
 
-  // NOMINATIM AUTO-SÖK: Letar globalt efter platser när man skriver
-   // NOMINATIM AUTO-SÖK: Letar efter platser i NORDEN när man skriver
+  // NOMINATIM AUTO-SÖK: Begränsat till NORDEN
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
       if (searchQuery.trim().length > 2) {
         setIsSearching(true);
         try {
-          // Lade till &countrycodes=se,no,dk,fi,is för att begränsa till Norden!
-          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5&countrycodes=se,no,dk,fi,`);
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5&countrycodes=se,no,dk,fi,is`);
           const data = await res.json();
           setSearchResults(data);
         } catch (e) {
@@ -213,9 +216,27 @@ function ConvoyView({ currentUser }) {
       } else {
         setSearchResults([]);
       }
-    }, 800); // 800ms debounce så vi inte spammar API:et
+    }, 800);
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery]);
+
+  // Funktion för att visa ett tips från listan på kartan
+  const handleShowProposalOnMap = (proposal) => {
+    if (proposal && proposal.latitude && proposal.longitude) {
+      const lat = parseFloat(proposal.latitude);
+      const lng = parseFloat(proposal.longitude);
+      
+      setMapCenter([lat, lng]);
+      setMapZoom(14);
+      setFlyTrigger(prev => prev + 1);
+
+      setFocusMarker({
+        coords: [lat, lng],
+        name: proposal.name,
+        createdBy: proposal.created_by_name || 'En Buddy'
+      });
+    }
+  };
 
   const fetchProposals = async () => {
     const { data } = await supabase.from('proposals').select('*').order('votes_up', { ascending: false });
@@ -304,45 +325,39 @@ function ConvoyView({ currentUser }) {
   const selectAllFilters = () => setActiveFilters({ ...Object.keys(SERVICE_META).reduce((acc, k) => ({...acc, [k]: true}), {}), hidden_gems: true });
   const clearAllFilters = () => setActiveFilters({ ...ALL_FILTERS_FALSE });
 
-  // UPPDATERAD: När användaren klickar FRITT på kartan
   const handleMapClick = async (latlng) => {
     setTempMarker(latlng);
     setMapCenter([latlng.lat, latlng.lng]);
-    setFlyTrigger(prev => prev + 1); // Centrerar mjukt på klicket!
+    setFlyTrigger(prev => prev + 1); 
+    setFocusMarker(null); 
 
     try {
-      // Lade till addressdetails=1 för att säkert få ut gatunamn/info
       const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latlng.lat}&lon=${latlng.lng}&zoom=18&addressdetails=1`);
       const data = await res.json();
       const addr = data.address || {};
       const placeName = data.name || addr.caravan_site || addr.camp_site || addr.road || "Markerad plats";
-      
       setModalDraft({ name: placeName, lat: latlng.lat, lng: latlng.lng });
     } catch (e) { 
       setModalDraft({ name: 'Markerad plats', lat: latlng.lat, lng: latlng.lng }); 
     }
   };
 
-  // NÄR ANVÄNDAREN KLICKAR PÅ ETT RESULTAT I NOMINATIM-LISTAN
   const handleSelectSearchResult = (result) => {
     const lat = parseFloat(result.lat);
     const lon = parseFloat(result.lon);
     
-    // Plocka ut det vettigaste namnet
     const cleanName = result.name || result.display_name.split(',')[0];
 
-    // Animera dit
     setMapCenter([lat, lon]);
-    setMapZoom(14); // Zooma in lite närmare på sökningen
+    setMapZoom(14);
     setFlyTrigger(prev => prev + 1);
 
-    // Skapa knappnål
     setTempMarker({ lat, lng: lon });
     setModalDraft({ name: cleanName, lat, lng: lon });
 
-    // Städa upp gränssnitt
     setSearchQuery(cleanName); 
     setSearchResults([]); 
+    setFocusMarker(null); 
   };
 
   const triggerAddFlow = (draft) => { setModalDraft(draft); if (isConvoyFull) setShowReplaceModal(true); else setShowCreateModal(true); };
@@ -364,11 +379,22 @@ function ConvoyView({ currentUser }) {
           <MapEvents onMapClick={handleMapClick} />
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           
-          {/* RITA UT ANVÄNDARENS POSITION */}
           {userLocation && (
               <Marker position={userLocation} icon={blueDotIcon} zIndexOffset={1000}>
                 <Popup><strong style={{ color: '#4285F4' }}>Du är här</strong></Popup>
               </Marker>
+          )}
+
+          {focusMarker && (
+            <Marker position={focusMarker.coords} icon={redIcon}>
+              <Popup autoOpen>
+                <div style={{ textAlign: 'center', minWidth: '160px' }}>
+                  <h3 style={{ margin: '0 0 8px 0', color: '#2F5D3A', fontSize: '16px' }}>{focusMarker.name}</h3>
+                  <hr style={{ border: 'none', borderTop: '1px solid #EEE7DB', marginBottom: '10px' }} />
+                  <p style={{ fontSize: '11px', color: '#667276', marginBottom: '15px' }}>Tips från {focusMarker.createdBy}</p>
+                </div>
+              </Popup>
+            </Marker>
           )}
 
           {proposals.map(p => {
@@ -382,12 +408,9 @@ function ConvoyView({ currentUser }) {
                     <div style={{ textAlign: 'center', minWidth: '180px' }}>
                         <h3 style={{ margin: '0 0 8px 0', color: '#2F5D3A', fontSize: '16px' }}>{poi.name}</h3>
                         <hr style={{ border: 'none', borderTop: '1px solid #EEE7DB', marginBottom: '10px' }} />
-                        <p style={{ fontSize: '11px', color: '#667276', marginBottom: '15px' }}>{poi.description || 'Importerad plats'}</p>
-                        
                         <button onClick={() => openNavModal(poi)} style={goButtonStyle}>
                             Åk hit 🚐
                         </button>
-                        
                         <button 
                             onClick={() => triggerAddFlow(poi)} 
                             style={{ ...goButtonStyle, backgroundColor: 'transparent', color: '#2F5D3A', marginTop: '8px', border: '1px solid #2F5D3A', boxShadow: 'none' }}
@@ -405,7 +428,6 @@ function ConvoyView({ currentUser }) {
                 <Marker key={p.id} position={[parseFloat(p.latitude), parseFloat(p.longitude)]} icon={officialStarIcon}>
                     <Popup>
                         <div style={{ textAlign: 'center', minWidth: '160px' }}>
-                            <Star size={24} fill="#FFD700" color="#B8860B" style={{ margin: '0 auto 5px auto' }} />
                             <strong style={{ color: '#B8860B', display: 'block' }}>{p.name}</strong>
                             <button onClick={() => openNavModal(p)} style={{...goButtonStyle, marginTop: '10px'}}>Åk hit 🚐</button>
                         </div>
@@ -428,7 +450,6 @@ function ConvoyView({ currentUser }) {
           </button>
       </div>
 
-      {/* --- SÖKFÄLT MED NOMINATIM DROPDOWN --- */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', width: '100%', boxSizing: 'border-box' }}>
         <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
           <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#999', flexShrink: 0 }} />
@@ -440,7 +461,6 @@ function ConvoyView({ currentUser }) {
             style={searchInputStyle} 
           />
           
-          {/* NOMINATIM RULLGARDIN */}
           {searchResults.length > 0 && (
             <div style={searchResultsDropdownStyle}>
               {searchResults.map((result) => (
@@ -475,7 +495,12 @@ function ConvoyView({ currentUser }) {
           <div key={p.id} style={proposalCardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '18px', color: '#243137' }}>{p.name}</h3>
+                <h3 
+                  style={{ margin: '0 0 4px 0', fontSize: '18px', color: '#2F5D3A', textDecoration: 'underline', cursor: 'pointer' }} 
+                  onClick={() => handleShowProposalOnMap(p)}
+                >
+                  {p.name}
+                </h3>
                 <span style={{ fontSize: '12px', color: '#98A4A5' }}>Tips från {p.created_by_name}</span>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -494,7 +519,6 @@ function ConvoyView({ currentUser }) {
         ))}
       </div>
 
-      {/* --- MJUK FILTERMODAL --- */}
       {findModalRendered && (
         <div style={{ ...modalOverlayStyle, opacity: findModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeFindModal}>
           <div style={{ ...modalSheetStyle, transform: findModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)' }} onClick={e => e.stopPropagation()}>
@@ -524,7 +548,6 @@ function ConvoyView({ currentUser }) {
         </div>
       )}
 
-      {/* --- MJUK NAVIGERINGS-MODAL --- */}
       {navModalRendered && (
         <div style={{ ...modalOverlayStyle, opacity: navModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeNavModal}>
           <div style={{ ...modalSheetStyle, transform: navModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)', padding: '24px' }} onClick={e => e.stopPropagation()}>
@@ -551,11 +574,8 @@ const mapWrapperStyle = { height: '350px', borderRadius: '28px', overflow: 'hidd
 const legendButtonStyle = { position: 'absolute', bottom: '15px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, backgroundColor: 'white', padding: '12px 20px', borderRadius: '999px', display: 'flex', alignItems: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', cursor: 'pointer', fontWeight: '800', whiteSpace: 'nowrap' };
 const centerMapBtnStyle = { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FAF9F6', color: '#2F5D3A', border: '1px solid #E5E0D8', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' };
 const searchInputStyle = { width: '100%', padding: '14px 14px 14px 38px', borderRadius: '16px', border: '2px solid #ECE7DF', outline: 'none', backgroundColor: '#FAF9F6', boxSizing: 'border-box' };
-
-// STYLES FÖR SÖK-DROPDOWN
 const searchResultsDropdownStyle = { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: '#FFF', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', border: '1px solid #ECE7DF', marginTop: '8px', zIndex: 4000, maxHeight: '250px', overflowY: 'auto' };
 const searchResultItemStyle = { padding: '12px 16px', borderBottom: '1px solid #F0F0F0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px' };
-
 const addBtnStyle = { backgroundColor: '#2F5D3A', border: 'none', borderRadius: '16px', width: '52px', height: '52px', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const countInfoStyle = { fontSize: '11px', fontWeight: '800', color: '#98A4A5', textAlign: 'right', textTransform: 'uppercase', marginBottom: '5px' };
 const proposalCardStyle = { backgroundColor: '#FAF9F6', padding: '20px', borderRadius: '24px', border: '1px solid #EEE7DB' };

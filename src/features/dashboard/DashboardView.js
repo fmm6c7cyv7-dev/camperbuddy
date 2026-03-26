@@ -124,6 +124,23 @@ const ALL_SERVICES_FALSE = Object.keys(SERVICE_META_ALL).reduce((acc, key) => ({
 
 // --- KOMPONENT START ---
 function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
+  
+  // NY: Funktion för att flyga till vinnaren på Konvoj-fliken
+  const handleGoToTopProposal = (proposal) => {
+    if (proposal && proposal.latitude && proposal.longitude) {
+      // 1. Spara koordinater och zoom i sessionStorage
+      sessionStorage.setItem('openConvoyFocus', JSON.stringify({
+        coords: [parseFloat(proposal.latitude), parseFloat(proposal.longitude)],
+        zoom: 15 // Zooma in lite extra nära för en tydlig vy
+      }));
+      // 2. Byt flik som vanligt
+      setActiveTab('convoy');
+    } else {
+      // Om vi inte har koordinater, öppna bara fliken normalt
+      setActiveTab('convoy');
+    }
+  };
+  
   const [navModalVisible, setNavModalVisible] = useState(false);
   const [navModalRendered, setNavModalRendered] = useState(false);
   const [selectedNavPoi, setSelectedNavPoi] = useState(null);
@@ -282,9 +299,10 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     if (!selectedNavPoi) return;
     const lat = selectedNavPoi.lat || selectedNavPoi.latitude;
     const lng = selectedNavPoi.lng || selectedNavPoi.longitude;
+    // FIXAD: Korrekt URL för Google Maps
     const url = type === 'waze' 
       ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` 
-      : `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+      : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
     window.open(url, '_blank');
     closeNavModal();
   };
@@ -448,14 +466,14 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
           </div>
         </div>
         
-        {/* --- NY: CENTRERA KARTA-KNAPPEN --- */}
+        {/* --- CENTRERA KARTA-KNAPPEN --- */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', marginTop: '-10px' }}>
            <button 
               onClick={() => { 
                 if(userLocation) { 
-                  // Vi tvingar en liten uppdatering i state för att trigga useEffect i ChangeView
                   setMapCenter([...userLocation]); 
-                  setMapZoom(10); // Flyger mjukt till 50km radie
+                  setMapZoom(10); 
+                  setFlyTrigger(prev => prev + 1); 
                 } 
               }} 
               style={centerMapBtnStyle}
@@ -463,15 +481,20 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
              <Navigation size={14} /> Centrera karta
            </button>
         </div>
-
+          
         <div style={summaryGridStyle}>
-          <div style={smallSectionStyle} onClick={() => setActiveTab('convoy')}>
+          {/* HÄR ANVÄNDS DEN NYA FUNKTIONEN FÖR NAVIGERING */}
+          <div style={smallSectionStyle} onClick={() => handleGoToTopProposal(topProposal)}>
             <div style={sectionHeaderStyle}><Trophy size={14} color="#D8A826" /> LEDER OMRÖSTNINGEN</div>
             <div style={miniCardStyle}>
               <h4 style={miniTitleStyle}>
-                {topProposal 
-                  ? `${topProposal.created_by_name || 'En Buddy'} föreslår ${topProposal.name} som nästa stopp` 
-                  : 'Inga förslag ännu'}
+                {topProposal ? (
+                  <>
+                    <strong>{topProposal.created_by_name || 'En Buddy'}</strong> föreslår <strong>{topProposal.name}</strong> som nästa stopp
+                  </>
+                ) : (
+                  'Inga förslag ännu'
+                )}
               </h4>
             </div>
           </div>
@@ -501,12 +524,11 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         </div>
       </div>
 
-      {/* FILTER MODAL */}
+      {/* --- MODALER --- */}
       {filterModalRendered && (
         <div style={{ ...modalOverlayStyle, opacity: filterModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeFilterModal}>
           <div style={{ ...modalSheetStyle, transform: filterModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)' }} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHandleStyle}></div>
-            <h3 style={modalTitleStyle}>Filtrera POIs</h3>
+            <div style={modalHandleStyle}></div><h3 style={modalTitleStyle}>Filtrera POIs</h3>
             <div style={filterListStyle}>
               {Object.keys(QUICK_FILTERS).map(key => (
                 <button key={key} type="button" onClick={() => toggleFilter(key)} style={{ ...filterOptionStyle, ...(activeFilters[key] ? filterOptionActiveStyle : {}) }}>
@@ -526,31 +548,22 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         </div>
       )}
 
-      {/* MODAL: SKAPA POI */}
       {showCreateModal && (
         <div style={modalOverlayStyle} onClick={() => setShowCreateModal(false)}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, fontSize: '20px' }}>Spara ny plats</h2>
-              <button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none' }}><X /></button>
+              <h2 style={{ margin: 0, fontSize: '20px' }}>Spara ny plats</h2><button onClick={() => setShowCreateModal(false)} style={{ background: 'none', border: 'none' }}><X /></button>
             </div>
-            
             <p style={{ fontSize: '14px', color: '#667276', marginBottom: '8px' }}>Namn på platsen</p>
             <input type="text" value={newPoi.name} onChange={e => setNewPoi({...newPoi, name: e.target.value})} style={inputStyle} />
-
             <p style={{ fontSize: '14px', color: '#667276', marginBottom: '12px', marginTop: '15px' }}>Vad finns här?</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px', maxHeight: '180px', overflowY: 'auto', paddingRight: '5px' }}>
               {Object.keys(SERVICE_META_ALL).map(key => (
-                <button
-                  key={key} onClick={() => toggleServiceInModal(key)}
-                  style={{ ...serviceToggleBtn, backgroundColor: newPoi.services[key] ? SERVICE_META_ALL[key].color : '#F0F0F0', color: newPoi.services[key] ? 'white' : '#666', border: newPoi.services[key] ? 'none' : '1px solid #DDD' }}
-                >
-                  {newPoi.services[key] && <Check size={14} style={{ marginRight: '4px' }} />}
-                  {SERVICE_META_ALL[key].label}
+                <button key={key} onClick={() => toggleServiceInModal(key)} style={{ ...serviceToggleBtn, backgroundColor: newPoi.services[key] ? SERVICE_META_ALL[key].color : '#F0F0F0', color: newPoi.services[key] ? 'white' : '#666', border: newPoi.services[key] ? 'none' : '1px solid #DDD' }}>
+                  {newPoi.services[key] && <Check size={14} style={{ marginRight: '4px' }} />} {SERVICE_META_ALL[key].label}
                 </button>
               ))}
             </div>
-
             <button onClick={handleSavePoi} disabled={isSaving} style={saveBtnStyle}>
               {isSaving ? <Loader2 className="animate-spin" /> : <><Save size={20} /> Spara på kartan</>}
             </button>
@@ -558,36 +571,15 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         </div>
       )}
 
-      {/* --- MJUK NAVIGERINGS-MODAL (BOTTEN-SLIDE) --- */}
       {navModalRendered && (
         <div style={{ ...modalOverlayStyle, opacity: navModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeNavModal}>
-          <div style={{ 
-            ...modalSheetStyle, 
-            transform: navModalVisible ? 'translateY(0)' : 'translateY(100%)', 
-            transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
-            padding: '20px 24px 40px 24px' 
-          }} onClick={e => e.stopPropagation()}>
+          <div style={{ ...modalSheetStyle, transform: navModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)', padding: '20px 24px 40px 24px' }} onClick={e => e.stopPropagation()}>
             <div style={modalHandleStyle} />
-            
-            <h3 style={{ ...modalTitleStyle, textAlign: 'center', marginBottom: '10px' }}>
-              Vill du åka till {selectedNavPoi?.name}?
-            </h3>
-            <p style={{ textAlign: 'center', color: '#667276', marginBottom: '25px', fontSize: '14px' }}>
-              Välj din favoritapp för navigering.
-            </p>
-
+            <h3 style={{ ...modalTitleStyle, textAlign: 'center', marginBottom: '10px' }}>Vill du åka till {selectedNavPoi?.name}?</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <button onClick={() => handleNavigate('google')} style={navOptionBtnStyle}>
-                <Navigation size={20} color="#4285F4" style={{ marginRight: '12px' }} /> 
-                <span style={{ flex: 1 }}>Google Maps</span>
-              </button>
-
-              <button onClick={() => handleNavigate('waze')} style={navOptionBtnStyle}>
-                <Navigation size={20} color="#33CCFF" style={{ marginRight: '12px' }} /> 
-                <span style={{ flex: 1 }}>Waze</span>
-              </button>
+              <button onClick={() => handleNavigate('google')} style={navOptionBtnStyle}><Navigation size={20} color="#4285F4" style={{ marginRight: '12px' }} /> <span style={{ flex: 1 }}>Google Maps</span></button>
+              <button onClick={() => handleNavigate('waze')} style={navOptionBtnStyle}><Navigation size={20} color="#33CCFF" style={{ marginRight: '12px' }} /> <span style={{ flex: 1 }}>Waze</span></button>
             </div>
-
             <button onClick={closeNavModal} style={cancelBtnStyle}>Avbryt</button>
           </div>
         </div>
@@ -596,7 +588,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   );
 }
 
-// --- STYLES ---
+// --- ALLA STYLES LIGGER HÄR UNDER ---
 const loadingStateStyle = { textAlign: 'center', marginTop: '100px', color: '#8B9798' };
 const weatherCardStyle = { background: '#F7F4EE', border: '1px solid #E8E1D6', borderRadius: '20px', padding: '12px 16px', marginBottom: '14px' };
 const weatherItemStyle = { display: 'flex', alignItems: 'center', gap: '5px' };
