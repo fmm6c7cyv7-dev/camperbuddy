@@ -664,10 +664,10 @@ function App() {
             <div style={sheetActionGridStyle}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <button type="button" onClick={() => cameraInputRef.current?.click()} style={sheetActionBtnStyle}>
-                  <Camera size={22} /><span>Öppna kamera</span>
+                  <Camera size={22} /><span>Öppna kamera </span>
                 </button>
                 <span style={{ fontSize: '11px', color: '#95A5A6', textAlign: 'center', lineHeight: '1.3', padding: '0 10px' }}>
-                  Obs: Bilden sparas säkert i din loggbok i en lägre kvalitet, vill du ha kvar originalet i din ordinarie upplösning telefonen bör du använda telefonens egen kamera och välja "Bibliotek" nedan.
+                  Obs: Bilden sparas säkert i din loggbok i en lägre kvalitet, vill du ha kvar din bild i hög upplösning rekomenderar camperBUDDY att ni använder telefonens egen kamera och väljer att hämta upp bilden från ditt " Bibliotek".
                 </span>
               </div>
               
