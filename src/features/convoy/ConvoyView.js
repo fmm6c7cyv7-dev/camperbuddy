@@ -177,7 +177,17 @@ function ConvoyView({ currentUser }) {
       if (focusData.coords) {
           setMapCenter(focusData.coords);
           setMapZoom(focusData.zoom || 14);
+          
+          // Sätt markören så platsen faktiskt får en röd prick!
+          setFocusMarker({
+            coords: focusData.coords,
+            name: focusData.name || 'Föreslagen plats',
+            createdBy: focusData.createdBy || 'En Buddy'
+          });
+          
           setFlyTrigger(prev => prev + 1);
+          // Auto-scrolla upp till kartan
+          setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
       }
     } else if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -222,6 +232,9 @@ function ConvoyView({ currentUser }) {
 
   // Funktion för att visa ett tips från listan på kartan
   const handleShowProposalOnMap = (proposal) => {
+    // 1. Scrolla upp till kartan omedelbart när man klickar
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
     if (proposal && proposal.latitude && proposal.longitude) {
       const lat = parseFloat(proposal.latitude);
       const lng = parseFloat(proposal.longitude);
@@ -235,6 +248,11 @@ function ConvoyView({ currentUser }) {
         name: proposal.name,
         createdBy: proposal.created_by_name || 'En Buddy'
       });
+    } else {
+      // 2. Berätta för användaren om platsen saknar koordinater
+      setTimeout(() => {
+        alert(`"${proposal.name}" lades tyvärr till utan karta och saknar koordinater.`);
+      }, 500);
     }
   };
 
@@ -436,7 +454,7 @@ function ConvoyView({ currentUser }) {
              );
           })}
 
-          {/* UPPDATERAD KART-POPUP (Snyggare design när man klickar fritt) */}
+          {/* Snygg popup för klick på kartan */}
           {tempMarker && (
             <Marker position={tempMarker} icon={redIcon}>
               <Popup autoOpen>
@@ -453,7 +471,6 @@ function ConvoyView({ currentUser }) {
               </Popup>
             </Marker>
           )}
-
         </MapContainer>
         <div style={legendButtonStyle} onClick={openFindModal}><Search size={16} style={{marginRight:'8px', flexShrink: 0}}/><span>Hitta platser & POIs</span></div>
       </div>
@@ -580,7 +597,7 @@ function ConvoyView({ currentUser }) {
         </div>
       )}
 
-      {/* UPPDATERAD SKAPA-MODAL (Snyggare design istället för den lilla rutan) */}
+      {/* Skapa ny plats modal */}
       {showCreateModal && (
         <div style={modalOverlayStyle} onClick={() => setShowCreateModal(false)}>
           <div style={modalSheetStyle} onClick={e => e.stopPropagation()}>
@@ -600,8 +617,8 @@ function ConvoyView({ currentUser }) {
           </div>
         </div>
       )}
-
-      {/* UPPDATERAD BYTA-UT-MODAL (Utgråad lista + rött streck) */}
+      
+      {/* Byt ut Modal med utgråad lista */}
       {showReplaceModal && (
         <div style={modalOverlayStyle} onClick={() => setShowReplaceModal(false)}>
           <div style={modalSheetStyle} onClick={e => e.stopPropagation()}>
@@ -667,7 +684,6 @@ const goButtonStyle = { width: '100%', padding: '12px', backgroundColor: '#2F5D3
 const deleteBtnStyle = { background: 'none', border: 'none', color: '#98A4A5', cursor: 'pointer', marginLeft: '8px' };
 const modalOverlayStyle = { position: 'fixed', inset: 0, zIndex: 3000, backgroundColor: 'rgba(24, 29, 26, 0.42)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' };
 const modalSheetStyle = { width: '100%', maxWidth: '520px', backgroundColor: '#FAF9F6', borderTopLeftRadius: '32px', borderTopRightRadius: '32px', padding: '24px', boxSizing: 'border-box' };
-const modalStyle = { backgroundColor: 'white', padding: '24px', borderRadius: '28px', width: '90%', maxWidth: '400px' };
 const modalHandleStyle = { width: '40px', height: '4px', backgroundColor: '#ddd', borderRadius: '2px', margin: '0 auto 16px auto' };
 const modalTitleStyle = { margin: '0', fontSize: '20px', fontWeight: '800' };
 const findGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '24px' };
