@@ -1,170 +1,126 @@
-import React, { useState, useEffect } from 'react';
-import {
-  BookOpen,
-  Plus,
-  MapPin,
-  Calendar,
-  Trash2,
-  Loader2,
-  Pencil,
-} from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Camera, MapPin, Calendar, Trash2, Loader2, Plus, X } from 'lucide-react'; // LADE TILL: 'X' för stängknappen
 import { supabase } from '../../services/supabaseClient';
 
-// --- HJÄLPFUNKTIONER ---
-function formatEntryDate(value) {
-  if (!value) return '';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const [year, month, day] = value.split('-');
-    return `${year}-${month}-${day}`;
-  }
-  const parsed = new Date(value);
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
-  }
-  return String(value);
-}
-
-function LogbookView({ onOpenComposer, onEditEntry, refreshKey }) {
+function LogbookView({ currentUser, onOpenComposer, refreshKey }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedImage, setSelectedImage] = useState(null); // LADE TILL: State för förstorad bild
 
-  const fetchEntries = async () => {
+  const fetchEntries = useCallback(async () => {
+    if (!currentUser?.id) return;
     setLoading(true);
-    // Hämtar alla minnen sorterat på datum (senaste först)
-    const { data, error } = await supabase
-      .from('logbook')
-      .select('*')
-      .order('date', { ascending: false });
-
-    if (!error && data) {
-      setEntries(data);
+    try {
+      const { data, error } = await supabase
+        .from('logbook')
+        .select('*')
+        .eq('buddy_id', currentUser.id) // Kopplat till din 'buddies' tabell
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setEntries(data || []);
+    } catch (err) {
+      console.error("Logbook fetch error:", err.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
+  }, [currentUser]);
 
   useEffect(() => {
     fetchEntries();
-  }, [refreshKey]);
+  }, [fetchEntries, refreshKey]);
 
-  const handleDeleteEntry = async (entryId) => {
-    const confirmed = window.confirm('Vill du radera detta minne för alltid?');
-    if (!confirmed) return;
-
-    const { error } = await supabase.from('logbook').delete().eq('id', entryId);
-    if (!error) {
-      fetchEntries();
-    } else {
-      alert("Kunde inte radera: " + error.message);
-    }
+  const handleDelete = async (id) => {
+    if (!window.confirm("Vill du radera detta minne?")) return;
+    const { error } = await supabase.from('logbook').delete().eq('id', id);
+    if (!error) setEntries(prev => prev.filter(e => e.id !== id));
   };
 
-  if (loading) {
-    return (
-      <div style={loadingWrapStyle}>
-        <Loader2 className="animate-spin" size={32} color="#2F5D3A" />
-        <span style={{ color: '#98A4A5', fontWeight: '600', marginTop: '10px' }}>Hämtar dina äventyr...</span>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '100px' }}>
+      <Loader2 className="animate-spin" size={32} color="#2F5D3A" />
+    </div>
+  );
 
   return (
-    <div style={{ padding: '20px', paddingBottom: '120px' }} className="animate-fade-in">
-      <header style={headerStyle}>
-        <div>
-          <h1 style={titleStyle}>Min Resedagbok</h1>
-          <p style={subtitleStyle}>{entries.length} sparade äventyr</p>
-        </div>
-        <div style={countBadgeStyle}>
-          <BookOpen size={20} color="#2F5D3A" />
-        </div>
+    <div style={{ padding: '20px', paddingBottom: '120px' }}>
+      <header style={{ marginBottom: '30px' }}>
+        <h1 style={{ fontSize: '26px', fontWeight: '900', color: '#243137', margin: 0 }}>Min Loggbok</h1>
+        <p style={{ color: '#98A4A5', fontSize: '14px' }}>Dina samlade äventyr ({entries.length} st)</p>
       </header>
 
-      <div style={entriesGridStyle}>
-        {entries.length === 0 ? (
-          <div style={emptyStateStyle}>
-            <MapPin size={48} color="#ECE7DF" />
-            <p>Loggboken är tom. Dags att skapa nya minnen längs vägen!</p>
-          </div>
-        ) : (
-          entries.map((entry) => (
-            <div key={entry.id} style={entryCardStyle}>
+      {entries.length === 0 ? (
+        <div style={emptyStateStyle} onClick={onOpenComposer}>
+          <div style={emptyIconCircle}><Camera size={32} color="#2F5D3A" /></div>
+          <h3 style={{ margin: '10px 0 5px 0', color: '#243137' }}>Börja skriva din historia</h3>
+          <p style={{ color: '#98A4A5', fontSize: '14px', margin: 0 }}>Tryck på plusset för att skapa ditt första minne.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {entries.map(entry => (
+            <div key={entry.id} style={cardStyle}>
+              {/* LADE TILL: onClick och cursor pointer på bilden */}
               {entry.image_url && (
-                <div style={imageContainerStyle}>
-                  <img src={entry.image_url} alt={entry.title} style={entryImageStyle} />
-                </div>
+                <img 
+                  src={entry.image_url} 
+                  style={{ ...imgStyle, cursor: 'zoom-in' }} 
+                  alt="" 
+                  onClick={() => setSelectedImage(entry.image_url)}
+                />
               )}
-
-              <div style={{ padding: '20px' }}>
-                <div style={entryTopRowStyle}>
-                  <h3 style={entryTitleStyle}>{entry.title || 'Utan titel'}</h3>
-                  <div style={entryActionGroupStyle}>
-                    <button 
-                      onClick={() => onEditEntry(entry)} 
-                      style={editBtnStyle}
-                      aria-label="Redigera"
-                    >
-                      <Pencil size={14} style={{ marginRight: '6px' }} /> Redigera
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteEntry(entry.id)} 
-                      style={deleteBtnStyle}
-                      aria-label="Radera"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
+              <div style={{ padding: '18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>{entry.title}</h3>
+                  <button onClick={() => handleDelete(entry.id)} style={deleteBtn}><Trash2 size={16} /></button>
                 </div>
-
-                <p style={entryContentStyle}>{entry.content}</p>
-
-                <div style={entryFooterStyle}>
-                  <span style={infoItemStyle}>
-                    <MapPin size={14} /> {entry.location || 'Okänd plats'}
-                  </span>
-                  <span style={infoItemStyle}>
-                    <Calendar size={14} /> {formatEntryDate(entry.date)}
-                  </span>
+                <p style={contentStyle}>{entry.content}</p>
+                <div style={metaStyle}>
+                  <span style={tagStyle}><MapPin size={12} /> {entry.location || 'Okänd plats'}</span>
+                  <span style={tagStyle}><Calendar size={12} /> {new Date(entry.created_at).toLocaleDateString('sv-SE')}</span>
                 </div>
               </div>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
-      <button onClick={onOpenComposer} style={floatingBtnStyle}>
-        <Plus size={28} />
+      {/* Den runda plus-knappen för att öppna loggboken */}
+      <button onClick={onOpenComposer} style={fabStyle}>
+        <Plus size={32} color="white" />
       </button>
+
+      {/* LADE TILL: Modal för förstorad bild (Lightbox) */}
+      {selectedImage && (
+        <div style={lightboxOverlayStyle} onClick={() => setSelectedImage(null)}>
+          <button style={lightboxCloseBtnStyle} onClick={() => setSelectedImage(null)}>
+            <X size={32} color="white" />
+          </button>
+          <img 
+            src={selectedImage} 
+            style={lightboxImageStyle} 
+            alt="Förstorad vy" 
+            onClick={(e) => e.stopPropagation()} 
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-// --- STYLES ---
-const headerStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' };
-const titleStyle = { fontSize: '26px', fontWeight: '800', color: '#243137', margin: 0 };
-const subtitleStyle = { fontSize: '14px', color: '#98A4A5', margin: '4px 0 0 0' };
-const countBadgeStyle = { backgroundColor: '#F0F4EF', padding: '12px', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' };
-const loadingWrapStyle = { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh' };
-const emptyStateStyle = { textAlign: 'center', padding: '60px 20px', color: '#98A4A5', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', fontWeight: '500' };
+// STYLING (Matchar din dashboard perfekt)
+const cardStyle = { backgroundColor: '#FFF', borderRadius: '28px', overflow: 'hidden', border: '1px solid #EEE7DB', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' };
+const imgStyle = { width: '100%', height: '200px', objectFit: 'cover' };
+const contentStyle = { color: '#4A5568', fontSize: '15px', lineHeight: '1.5', margin: '12px 0' };
+const metaStyle = { display: 'flex', gap: '12px', marginTop: '15px' };
+const tagStyle = { display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#98A4A5', fontWeight: '800', textTransform: 'uppercase' };
+const deleteBtn = { border: 'none', background: '#FFF0F0', color: '#E74C3C', padding: '8px', borderRadius: '12px', cursor: 'pointer' };
+const emptyStateStyle = { textAlign: 'center', padding: '60px 20px', backgroundColor: '#F0F4EF', borderRadius: '32px', marginTop: '20px', cursor: 'pointer' };
+const emptyIconCircle = { width: '64px', height: '64px', backgroundColor: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' };
+const fabStyle = { position: 'fixed', bottom: '100px', right: '25px', width: '64px', height: '64px', backgroundColor: '#2F5D3A', borderRadius: '22px', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 25px rgba(47,93,58,0.3)', cursor: 'pointer', zIndex: 100 };
 
-const entriesGridStyle = { display: 'flex', flexDirection: 'column', gap: '24px' };
-const entryCardStyle = { backgroundColor: '#FAF9F6', borderRadius: '28px', overflow: 'hidden', border: '1px solid #EEE7DB', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' };
-const imageContainerStyle = { width: '100%', height: '220px', overflow: 'hidden' };
-const entryImageStyle = { width: '100%', height: '100%', objectFit: 'cover' };
-const entryTopRowStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' };
-const entryTitleStyle = { margin: 0, fontSize: '19px', fontWeight: '700', color: '#243137' };
-const entryActionGroupStyle = { display: 'flex', alignItems: 'center', gap: '10px' };
-
-const entryContentStyle = { color: '#636E72', fontSize: '15px', lineHeight: '1.6', marginBottom: '20px', whiteSpace: 'pre-wrap' };
-const entryFooterStyle = { display: 'flex', gap: '15px', borderTop: '1px solid #EEE7DB', paddingTop: '15px', flexWrap: 'wrap' };
-const infoItemStyle = { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: '#95A5A6', textTransform: 'uppercase', letterSpacing: '0.5px' };
-
-const editBtnStyle = { border: '1px solid #DCE5DA', backgroundColor: '#EEF3EA', color: '#2F5D3A', borderRadius: '12px', padding: '6px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', fontSize: '12px', fontWeight: '800' };
-const deleteBtnStyle = { border: 'none', background: 'none', color: '#E74C3C', cursor: 'pointer', padding: '4px' };
-
-const floatingBtnStyle = {
-  position: 'fixed', bottom: '100px', right: '25px', width: '64px', height: '64px',
-  backgroundColor: '#2D5A27', color: 'white', border: 'none', borderRadius: '22px',
-  boxShadow: '0 12px 30px rgba(45,90,39,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'transform 0.2s'
-};
+// LADE TILL: Stilar för Lightbox
+const lightboxOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(23, 32, 38, 0.95)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' };
+const lightboxImageStyle = { maxWidth: '100%', maxHeight: '85vh', borderRadius: '16px', objectFit: 'contain', boxShadow: '0 20px 50px rgba(0,0,0,0.4)' };
+const lightboxCloseBtnStyle = { position: 'absolute', top: '25px', right: '25px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', padding: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
 export default LogbookView;

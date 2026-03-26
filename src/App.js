@@ -17,12 +17,13 @@ import {
   Loader2,
   LocateFixed,
   Star, 
-  LogOut, // Lagt till för test-knappen
+  LogOut, 
 } from 'lucide-react';
 
 import DashboardView from './features/dashboard/DashboardView';
 import ConvoyView from './features/convoy/ConvoyView';
-import LogbookView from './features/logbook/LogbookView';
+import LogbookView from './features/logbook/LogbookView'; 
+import LogbookComposer from './features/logbook/LogbookComposer'; 
 
 const STOP_THRESHOLD_KMH = 2;
 const STOP_DELAY_MS = 5000;
@@ -458,9 +459,8 @@ function App() {
         }
       }
       
-      // HÄR ÄR UPPDATERINGEN: buddy_id är nu med!
       const payload = {
-        buddy_id: currentUser?.id || null, // Sparar användarens unika ID
+        buddy_id: currentUser?.id || null, 
         title: composerDraft.title,
         content: composerDraft.content,
         location: composerDraft.location || 'Okänd plats',
@@ -472,11 +472,9 @@ function App() {
       let error = null;
       
       if (composerDraft.id) {
-        // Uppdaterar befintligt inlägg
         const result = await supabase.from('logbook').update(payload).eq('id', composerDraft.id);
         error = result.error;
       } else {
-        // Skapar nytt inlägg
         const result = await supabase.from('logbook').insert([payload]);
         error = result.error;
       }
@@ -499,7 +497,7 @@ function App() {
     switch (activeTab) {
       case 'home': return <DashboardView setActiveTab={setActiveTab} onOpenLogbookPhotoFlow={openDashboardPhotoFlow} currentUser={currentUser} />;
       case 'convoy': return <ConvoyView currentUser={currentUser} />;
-      case 'logbook': return <LogbookView onOpenComposer={openComposerFromLogbook} onEditEntry={openEditComposer} refreshKey={logbookRefreshKey} currentUser={currentUser} />; // La till currentUser här för framtida filtrering
+      case 'logbook': return <LogbookView onOpenComposer={openComposerFromLogbook} onEditEntry={openEditComposer} refreshKey={logbookRefreshKey} currentUser={currentUser} />; 
       default: return <DashboardView setActiveTab={setActiveTab} onOpenLogbookPhotoFlow={openDashboardPhotoFlow} currentUser={currentUser} />;
     }
   };
@@ -549,32 +547,29 @@ function App() {
               </div>
 
               {/* INPUT: ALIAS */}
-<input
-  type="text"
-  placeholder="Ditt Alias (t.ex. BodilBobil)"
-  value={onboardingName}
-  onChange={(e) => {
-    // Tar bort alla mellanslag direkt vid inmatning (regex: \s+)
-    const val = e.target.value.replace(/\s+/g, '');
-    setOnboardingName(val);
-    
-    // Om du la till 'setNeedsConfirmation' state:
-    if (typeof setNeedsConfirmation === 'function') {
-      setNeedsConfirmation(false);
-    }
-  }}
-  style={{
-    ...inputStyle,
-    width: '100%',
-    padding: '16px',
-    fontSize: '1rem',
-    borderRadius: '12px',
-    border: '2px solid #edf2f7',
-    textAlign: 'center',
-    marginBottom: '12px',
-    outline: 'none'
-  }}
-/>
+              <input
+                type="text"
+                placeholder="Ditt Alias (t.ex. BodilBobil)"
+                value={onboardingName}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\s+/g, '');
+                  setOnboardingName(val);
+                  if (typeof setNeedsConfirmation === 'function') {
+                    setNeedsConfirmation(false);
+                  }
+                }}
+                style={{
+                  ...inputStyle,
+                  width: '100%',
+                  padding: '16px',
+                  fontSize: '1rem',
+                  borderRadius: '12px',
+                  border: '2px solid #edf2f7',
+                  textAlign: 'center',
+                  marginBottom: '12px',
+                  outline: 'none'
+                }}
+              />
 
               {/* INPUT: PIN-KOD */}
               <input
@@ -605,22 +600,22 @@ function App() {
               )}
 
               <button
-  onClick={saveUserProfile}
-  style={{
-    ...primaryBtn,
-    backgroundColor: needsConfirmation ? '#4D8A57' : '#2F5D3A', // Lite ljusare grön vid bekräftelse
-    opacity: (onboardingName.trim() && onboardingPin.length === 4 && !isLoggingIn) ? 1 : 0.6,
-  }}
-  disabled={!onboardingName.trim() || onboardingPin.length !== 4 || isLoggingIn}
->
-  {isLoggingIn ? (
-    <Loader2 className="animate-spin" size={24} />
-  ) : needsConfirmation ? (
-    "Ja, skapa ny buddy! 🏕️" 
-  ) : (
-    "Starta resan 🏕️"
-  )}
-</button>
+                onClick={saveUserProfile}
+                style={{
+                  ...primaryBtn,
+                  backgroundColor: needsConfirmation ? '#4D8A57' : '#2F5D3A',
+                  opacity: (onboardingName.trim() && onboardingPin.length === 4 && !isLoggingIn) ? 1 : 0.6,
+                }}
+                disabled={!onboardingName.trim() || onboardingPin.length !== 4 || isLoggingIn}
+              >
+                {isLoggingIn ? (
+                  <Loader2 className="animate-spin" size={24} />
+                ) : needsConfirmation ? (
+                  "Ja, skapa ny buddy! 🏕️" 
+                ) : (
+                  "Starta resan 🏕️"
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -637,12 +632,6 @@ function App() {
 
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleCameraChange} style={{ display: 'none' }} />
       <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleGalleryChange} style={{ display: 'none' }} />
-
-      {activeTab === 'home' && (
-        <button onClick={simulateStop} style={simulateStopBtnStyle}>
-          Simulera att din husbil har stannat
-        </button>
-      )}
 
       {assistantMounted && (
         <div style={{ ...assistantOverlayStyle, opacity: assistantVisible ? 1 : 0, pointerEvents: assistantVisible ? 'auto' : 'none' }}>
@@ -673,8 +662,18 @@ function App() {
             </div>
             <p style={actionSheetTextStyle}>Välj hur du vill skapa ditt nya minne.</p>
             <div style={sheetActionGridStyle}>
-              <button type="button" onClick={() => cameraInputRef.current?.click()} style={sheetActionBtnStyle}><Camera size={22} /><span>Öppna kamera</span></button>
-              <button type="button" onClick={() => galleryInputRef.current?.click()} style={sheetActionBtnStyle}><ImageIcon size={22} /><span>Välj från bibliotek</span></button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <button type="button" onClick={() => cameraInputRef.current?.click()} style={sheetActionBtnStyle}>
+                  <Camera size={22} /><span>Öppna kamera</span>
+                </button>
+                <span style={{ fontSize: '11px', color: '#95A5A6', textAlign: 'center', lineHeight: '1.3', padding: '0 10px' }}>
+                  Obs: Bilden sparas säkert i din loggbok i en lägre kvalitet, vill du ha kvar originalet i din ordinarie upplösning telefonen bör du använda telefonens egen kamera och välja "Bibliotek" nedan.
+                </span>
+              </div>
+              
+              <button type="button" onClick={() => galleryInputRef.current?.click()} style={{...sheetActionBtnStyle, marginTop: '8px'}}>
+                <ImageIcon size={22} /><span>Välj från bibliotek</span>
+              </button>
             </div>
             <button type="button" onClick={closeMediaPicker} style={sheetCancelBtnStyle}>Avbryt</button>
           </div>
@@ -724,11 +723,20 @@ function App() {
         <button onClick={() => setActiveTab('convoy')} style={navItem(activeTab === 'convoy')}><Users /><span>Konvoj</span></button>
         <button onClick={() => setActiveTab('logbook')} style={navItem(activeTab === 'logbook')}><BookOpen /><span>Logg</span></button>
       </nav>
+
+      {/* HÄR LÄGGER VI TILL DEN NYA MODALEN */}
+      <LogbookComposer 
+        isOpen={composerVisible}
+        onClose={() => setComposerVisible(false)}
+        onSave={() => setLogbookRefreshKey(prev => prev + 1)}
+        currentUser={currentUser}
+      />
+
     </div>
   );
 }
 
-// --- STYLES --- (Inga ändringar förutom renderContent-switch i return)
+// --- STYLES --- 
 const appShellStyle = { backgroundColor: '#F5F2ED', minHeight: '100vh' };
 const onboardingOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(245, 242, 237, 0.98)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' };
 const onboardingCardStyle = { backgroundColor: '#FAF9F6', borderRadius: '34px', width: '100%', maxWidth: '450px', boxShadow: '0 24px 60px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column' };
@@ -749,18 +757,7 @@ const primaryBtn = { backgroundColor: '#2F5D3A', color: 'white', border: 'none',
 const secondaryBtn = { flex: 1, backgroundColor: '#EAE5DD', color: '#7C8A8D', border: 'none', borderRadius: '28px', fontWeight: 500, fontSize: '22px', cursor: 'pointer' };
 const modalOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(24, 29, 26, 0.56)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, padding: '20px' };
 const modalStyle = { backgroundColor: '#FAF9F6', padding: '26px', borderRadius: '28px', width: '100%', maxWidth: '430px', boxShadow: '0 24px 60px rgba(0,0,0,0.18)' };
-// Lägg till denna i din STYLES-lista längst ner:
-const inputStyle = { 
-  width: '100%', 
-  padding: '14px 14px', 
-  borderRadius: '14px', 
-  border: '2px solid #ECE7DF', 
-  marginBottom: '12px', 
-  fontSize: '16px', 
-  boxSizing: 'border-box', 
-  backgroundColor: '#FBFAF7', 
-  color: '#172026' 
-};
+const inputStyle = { width: '100%', padding: '14px 14px', borderRadius: '14px', border: '2px solid #ECE7DF', marginBottom: '12px', fontSize: '16px', boxSizing: 'border-box', backgroundColor: '#FBFAF7', color: '#172026' };
 const iconOnlyBtnStyle = { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#172026' };
 const locationBtnStyle = { width: '100%', marginTop: '-2px', marginBottom: '12px', padding: '12px 14px', borderRadius: '14px', border: '1px solid #DCE5DA', backgroundColor: '#EEF3EA', color: '#2F5D3A', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' };
 const mediaBtnStyle = { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '13px', backgroundColor: '#ECE9E1', borderRadius: '14px', cursor: 'pointer', color: '#667276', fontWeight: 'bold', border: '1px solid #DDD7CC' };
@@ -774,5 +771,8 @@ const sheetActionBtnStyle = { width: '100%', border: '1px solid #DDD7CC', backgr
 const sheetCancelBtnStyle = { width: '100%', border: 'none', backgroundColor: '#1C2730', color: '#FFF', borderRadius: '16px', padding: '15px', fontWeight: 'bold', cursor: 'pointer' };
 const navStyle = { position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(248,247,243,0.95)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', justifyContent: 'space-around', padding: '10px 0 calc(20px + env(safe-area-inset-bottom)) 0', boxShadow: '0 -2px 10px rgba(0,0,0,0.05)', zIndex: 1900 };
 const navItem = (active) => ({ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'none', border: 'none', color: active ? '#2F5D3A' : '#95A5A6', fontSize: '10px', fontWeight: active ? 700 : 500 });
+const sheetTitleStyle = { margin: 0, fontSize: '18px', color: '#172026' };
+const modalHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' };
+const selectedFileBadge = { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', backgroundColor: '#EEF3EA', color: '#2F5D3A', borderRadius: '12px', fontSize: '13px', fontWeight: 600, marginBottom: '16px' };
 
 export default App;
