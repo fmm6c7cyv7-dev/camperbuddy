@@ -518,7 +518,20 @@ function ConvoyView({ currentUser }) {
           )}
         </div>
 
-        <button onClick={() => triggerAddFlow({ name: searchQuery, lat: null, lng: null })} style={addBtnStyle}>
+        <button 
+          onClick={() => {
+            if (!searchQuery.trim()) return; // Förhindra att man lägger till tomma förslag
+            
+            // Om texten i sökfältet matchar platsen vi precis klickade fram på kartan, använd de koordinaterna!
+            if (searchQuery === modalDraft.name && modalDraft.lat) {
+              triggerAddFlow(modalDraft);
+            } else {
+              // Om man bara har skrivit en egen text (utan att välja på kartan)
+              triggerAddFlow({ name: searchQuery, lat: null, lng: null });
+            }
+          }} 
+          style={addBtnStyle}
+        >
           <Plus color="white" />
         </button>
       </div>
