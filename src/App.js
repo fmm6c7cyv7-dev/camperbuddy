@@ -39,52 +39,44 @@ function CamperBuddyLogo() {
   );
 }
 
-// --- MODIFIERAD HEADER MED TEST-KNAPP ---
-function GlobalHeader({ activeTab, currentUser, onLogout }) {
-  const tabLabel =
-    activeTab === 'home' ? 'Hem' : activeTab === 'convoy' ? 'Konvoj' : 'Logg';
-
+// --- MODIFIERAD HEADER MED AVATAR ---
+function GlobalHeader({ currentUser, onLogout }) {
   return (
     <header style={headerShellStyle}>
       <div style={headerInnerStyle}>
         <CamperBuddyLogo />
 
         <div style={headerRightStyle}>
-          {/* TEST-KNAPP: Visas bara om vi är inloggade för att kunna hoppa tillbaka till onboarding */}
+          {/* Vår snygga Avatar-knapp som sköter in/utloggning */}
           {currentUser && (
-  <div 
-    onClick={onLogout}
-    style={{ 
-      width: '34px',
-      height: '34px',
-      borderRadius: '50%',
-      backgroundColor: '#E8F5E9',
-      border: '2px solid #2F5D3A',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: '10px',
-      cursor: 'pointer',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-      transition: 'transform 0.1s ease',
-      flexShrink: 0
-    }}
-  >
-    <span style={{ 
-      color: '#2F5D3A', 
-      fontWeight: '900', 
-      fontSize: '15px',
-      textTransform: 'uppercase'
-    }}>
-      {currentUser.name ? currentUser.name.charAt(0) : 'B'}
-    </span>
-  </div>
-)}
-          
-          <div style={headerPillStyle}>
-            <MapPin size={15} color="#2F5D3A" />
-            <span>{tabLabel}</span>
-          </div>
+            <div 
+              onClick={onLogout}
+              style={{ 
+                width: '34px',
+                height: '34px',
+                borderRadius: '50%',
+                backgroundColor: '#E8F5E9',
+                border: '2px solid #2F5D3A',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: '10px',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                transition: 'transform 0.1s ease',
+                flexShrink: 0
+              }}
+            >
+              <span style={{ 
+                color: '#2F5D3A', 
+                fontWeight: '900', 
+                fontSize: '15px',
+                textTransform: 'uppercase'
+              }}>
+                {currentUser.name ? currentUser.name.charAt(0) : 'B'}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </header>
@@ -111,7 +103,6 @@ function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingName, setOnboardingName] = useState('');
   
-  // --- NYA STATES FÖR PIN-KOD ---
   const [onboardingPin, setOnboardingPin] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
@@ -146,7 +137,6 @@ function App() {
     }
   }, []);
 
-  // --- FUNKTION FÖR ATT NOLLSTÄLLA (TEST) ---
   const handleLogout = () => {
     localStorage.removeItem('camperbuddy_profile');
     setCurrentUser(null);
@@ -156,9 +146,8 @@ function App() {
     setShowOnboarding(true);
   };
 
-  // --- UPPDATERAD INLOGGNINGSLOGIK MED PIN-KOD ---
   const saveUserProfile = async () => {
-    const cleanName = onboardingName.replace(/\s+/g, ''); // Tar bort ALLA mellanslag
+    const cleanName = onboardingName.replace(/\s+/g, ''); 
     const cleanPin = onboardingPin.trim();
 
     if (cleanName.length < 2) {
@@ -174,7 +163,6 @@ function App() {
     setLoginError('');
 
     try {
-      // 1. Kolla om namnet finns
       const { data: existingUser, error: searchError } = await supabase
         .from('buddies')
         .select('*')
@@ -182,7 +170,6 @@ function App() {
         .maybeSingle();
 
       if (existingUser) {
-        // Alias finns! Kolla om PIN matchar
         if (existingUser.pin === cleanPin) {
           const userProfile = { id: existingUser.id, name: existingUser.username };
           localStorage.setItem('camperbuddy_profile', JSON.stringify(userProfile));
@@ -193,8 +180,6 @@ function App() {
           setNeedsConfirmation(false);
         }
       } else {
-        // Alias finns INTE. 
-        // Om användaren inte har bekräftat än, visa frågan:
         if (!needsConfirmation) {
           setLoginError("Aliaset finns inte. Vill du skapa en ny buddy?");
           setNeedsConfirmation(true);
@@ -202,7 +187,6 @@ function App() {
           return;
         }
 
-        // Om de trycker igen (efter bekräftelse), skapa kontot:
         const { data: newUser, error: insertError } = await supabase
           .from('buddies')
           .insert([{ username: cleanName, pin: cleanPin }])
@@ -228,7 +212,6 @@ function App() {
     }
   };
 
-  // --- BEHÅLLER ALL DIN BEFINTLIGA LOGIK HÄRIFRÅN ---
   const resetComposer = () => {
     setComposerDraft({
       ...emptyComposer,
@@ -300,15 +283,6 @@ function App() {
     if (dismissUntilMove) setDismissedUntilMotion(true);
     if (assistantHideTimerRef.current) clearTimeout(assistantHideTimerRef.current);
     assistantHideTimerRef.current = setTimeout(() => setAssistantMounted(false), ASSISTANT_ANIMATION_MS);
-  };
-
-  const simulateStop = () => {
-    if (stopTimerRef.current) {
-      clearTimeout(stopTimerRef.current);
-      stopTimerRef.current = null;
-    }
-    setDismissedUntilMotion(false);
-    openAssistantModal();
   };
 
   useEffect(() => {
@@ -515,49 +489,23 @@ function App() {
 
   return (
     <div style={appShellStyle}>
-      {/* --- MODIFIERAD ONBOARDING (ALIAS + PIN) --- */}
       {showOnboarding && (
         <div style={onboardingOverlayStyle}>
-          <div style={{
-            ...onboardingCardStyle,
-            padding: 0,
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            width: '90%',
-            maxWidth: '400px'
-          }}>
-            <div style={{
-              backgroundColor: '#f8f9f8',
-              padding: '40px 20px',
-              borderBottom: '1px solid #e2e8f0',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center'
-            }}>
+          <div style={onboardingCardStyle}>
+            <div style={onboardingHeaderStyle}>
               <img 
                 src="/icons/icon-512.png" 
                 alt="CamperBUDDY" 
-                style={{ 
-                  height: '140px', 
-                  width: '140px', 
-                  borderRadius: '30px',
-                  boxShadow: '0 8px 25px rgba(0,0,0,0.1)' 
-                }} 
+                style={onboardingLogoStyle} 
               />
             </div>
 
-            <div style={{ padding: '30px 25px', textAlign: 'center' }}>
+            <div style={onboardingBodyStyle}>
               <div style={{ marginBottom: '25px' }}>
-                <p style={{ fontSize: '1.2rem', fontWeight: '700', color: '#334247', margin: '0' }}>
-                  Vem är du bakom ratten?
-                </p>
-                <p style={{ fontSize: '0.85rem', color: '#667085', marginTop: '8px', lineHeight: '1.4' }}>
-                  Välj ett alias och en 4-siffrig kod.
-                </p>
+                <p style={onboardingTitleStyle}>Vem är du bakom ratten?</p>
+                <p style={onboardingSubtitleStyle}>Välj ett alias och en 4-siffrig kod.</p>
               </div>
 
-              {/* INPUT: ALIAS */}
               <input
                 type="text"
                 placeholder="Ditt Alias (t.ex. BodilBobil)"
@@ -565,24 +513,11 @@ function App() {
                 onChange={(e) => {
                   const val = e.target.value.replace(/\s+/g, '');
                   setOnboardingName(val);
-                  if (typeof setNeedsConfirmation === 'function') {
-                    setNeedsConfirmation(false);
-                  }
+                  setNeedsConfirmation(false);
                 }}
-                style={{
-                  ...inputStyle,
-                  width: '100%',
-                  padding: '16px',
-                  fontSize: '1rem',
-                  borderRadius: '12px',
-                  border: '2px solid #edf2f7',
-                  textAlign: 'center',
-                  marginBottom: '12px',
-                  outline: 'none'
-                }}
+                style={onboardingInputStyle}
               />
 
-              {/* INPUT: PIN-KOD */}
               <input
                 type="tel"
                 pattern="[0-9]*"
@@ -590,25 +525,10 @@ function App() {
                 placeholder="4-siffrig PIN-kod"
                 value={onboardingPin}
                 onChange={(e) => setOnboardingPin(e.target.value.replace(/\D/g, ''))}
-                style={{
-                  ...inputStyle,
-                  width: '100%',
-                  padding: '16px',
-                  fontSize: '1rem',
-                  borderRadius: '12px',
-                  border: '2px solid #edf2f7',
-                  textAlign: 'center',
-                  marginBottom: '20px',
-                  outline: 'none',
-                  letterSpacing: '8px'
-                }}
+                style={{ ...onboardingInputStyle, letterSpacing: '8px' }}
               />
               
-              {loginError && (
-                <p style={{ color: '#E74C3C', fontSize: '13px', fontWeight: 'bold', marginBottom: '15px' }}>
-                  {loginError}
-                </p>
-              )}
+              {loginError && <p style={loginErrorStyle}>{loginError}</p>}
 
               <button
                 onClick={saveUserProfile}
@@ -619,22 +539,14 @@ function App() {
                 }}
                 disabled={!onboardingName.trim() || onboardingPin.length !== 4 || isLoggingIn}
               >
-                {isLoggingIn ? (
-                  <Loader2 className="animate-spin" size={24} />
-                ) : needsConfirmation ? (
-                  "Ja, skapa ny buddy! 🏕️" 
-                ) : (
-                  "Starta resan 🏕️"
-                )}
+                {isLoggingIn ? <Loader2 className="animate-spin" size={24} /> : needsConfirmation ? "Ja, skapa ny buddy! 🏕️" : "Starta resan 🏕️"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* --- RESTEN AV APPEN --- */}
       <GlobalHeader 
-        activeTab={activeTab} 
         currentUser={currentUser} 
         onLogout={handleLogout} 
       />
@@ -662,7 +574,6 @@ function App() {
         </div>
       )}
 
-      {/* Media Picker & Composer Modals fortsätter härifrån... (oförändrat) */}
       {showMediaPicker && (
         <div style={modalOverlayStyle} onClick={closeMediaPicker}>
           <div style={actionSheetStyle} className="animate-slide-up" onClick={(e) => e.stopPropagation()}>
@@ -673,16 +584,10 @@ function App() {
             </div>
             <p style={actionSheetTextStyle}>Välj hur du vill skapa ditt nya minne.</p>
             <div style={sheetActionGridStyle}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <button type="button" onClick={() => cameraInputRef.current?.click()} style={sheetActionBtnStyle}>
-                  <Camera size={22} /><span>Öppna kamera </span>
-                </button>
-                <span style={{ fontSize: '11px', color: '#95A5A6', textAlign: 'center', lineHeight: '1.3', padding: '0 10px' }}>
-                  Obs: Bilden sparas säkert i din loggbok i en lägre kvalitet, vill du ha kvar din bild i hög upplösning rekomenderar camperBUDDY att ni använder telefonens egen kamera och väljer att hämta upp bilden från ditt " Bibliotek".
-                </span>
-              </div>
-              
-              <button type="button" onClick={() => galleryInputRef.current?.click()} style={{...sheetActionBtnStyle, marginTop: '8px'}}>
+              <button type="button" onClick={() => cameraInputRef.current?.click()} style={sheetActionBtnStyle}>
+                <Camera size={22} /><span>Öppna kamera</span>
+              </button>
+              <button type="button" onClick={() => galleryInputRef.current?.click()} style={sheetActionBtnStyle}>
                 <ImageIcon size={22} /><span>Välj från bibliotek</span>
               </button>
             </div>
@@ -701,7 +606,8 @@ function App() {
             <input type="text" placeholder="Rubrik" value={composerDraft.title} onChange={(e) => setComposerDraft((prev) => ({ ...prev, title: e.target.value }))} style={inputStyle} />
             <input type="text" placeholder="Plats" value={composerDraft.location} onChange={(e) => setComposerDraft((prev) => ({ ...prev, location: e.target.value }))} style={inputStyle} />
             <button type="button" onClick={fillComposerWithCurrentLocation} disabled={composerLocating} style={locationBtnStyle}>
-              {composerLocating ? <><Loader2 className="animate-spin" size={16} />Hämtar position...</> : <><LocateFixed size={16} />Använd min position</>}
+              {composerLocating ? <Loader2 className="animate-spin" size={16} /> : <LocateFixed size={16} />}
+              <span>{composerLocating ? 'Hämtar position...' : 'Använd min position'}</span>
             </button>
             <button type="button" onClick={() => setComposerDraft(prev => ({ ...prev, isGoldenStar: !prev.isGoldenStar }))}
               style={{
@@ -709,22 +615,20 @@ function App() {
                 backgroundColor: composerDraft.isGoldenStar ? '#FFD700' : '#FBFAF7',
                 borderColor: composerDraft.isGoldenStar ? '#E6C200' : '#ECE7DF',
                 color: composerDraft.isGoldenStar ? '#5C4D00' : '#667276',
-                marginBottom: '12px',
-                transition: 'all 0.2s ease'
+                marginBottom: '12px'
               }}
             >
               <Star size={18} fill={composerDraft.isGoldenStar ? "#5C4D00" : "none"} />
-              {composerDraft.isGoldenStar ? 'Markerad som Guldstjärna!' : 'Tipsa Buddies om denna plats?'}
+              <span>{composerDraft.isGoldenStar ? 'Markerad som Guldstjärna!' : 'Tipsa Buddies om denna plats?'}</span>
             </button>
             <input type="date" value={composerDraft.date} onChange={(e) => setComposerDraft((prev) => ({ ...prev, date: e.target.value }))} style={inputStyle} />
             <textarea placeholder="Vad hände idag?" value={composerDraft.content} onChange={(e) => setComposerDraft((prev) => ({ ...prev, content: e.target.value }))} style={{ ...inputStyle, height: '96px', resize: 'none' }} />
             <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-              <button type="button" onClick={() => { setPickerTarget('composer'); cameraInputRef.current?.click(); }} style={mediaBtnStyle}><Camera size={20} />Kamera</button>
-              <button type="button" onClick={() => { setPickerTarget('composer'); galleryInputRef.current?.click(); }} style={mediaBtnStyle}><ImageIcon size={20} />Galleri</button>
+              <button type="button" onClick={() => { setPickerTarget('composer'); cameraInputRef.current?.click(); }} style={mediaBtnStyle}><Camera size={20} /><span>Kamera</span></button>
+              <button type="button" onClick={() => { setPickerTarget('composer'); galleryInputRef.current?.click(); }} style={mediaBtnStyle}><ImageIcon size={20} /><span>Galleri</span></button>
             </div>
-            {composerDraft.image && <div style={selectedFileBadge}><Check size={16} />Ny bild vald: {composerDraft.image.name.length > 24 ? `${composerDraft.image.name.slice(0, 24)}...` : composerDraft.image.name}</div>}
-            {!composerDraft.image && composerDraft.existingImageUrl && <div style={selectedFileBadge}><Check size={16} />Befintlig bild kommer att behållas</div>}
-            <button onClick={handleSaveComposer} disabled={composerUploading} style={saveBtnStyle}>{composerUploading ? <Loader2 className="animate-spin" /> : <><Save size={20} />{composerDraft.id ? 'Spara ändringar' : 'Spara minne'}</>}</button>
+            {composerDraft.image && <div style={selectedFileBadge}><Check size={16} /><span>Ny bild vald</span></div>}
+            <button onClick={handleSaveComposer} disabled={composerUploading} style={saveBtnStyle}>{composerUploading ? <Loader2 className="animate-spin" /> : <Save size={20} />}<span>Spara</span></button>
           </div>
         </div>
       )}
@@ -735,66 +639,57 @@ function App() {
         <button onClick={() => setActiveTab('logbook')} style={navItem(activeTab === 'logbook')}><BookOpen /><span>Logg</span></button>
       </nav>
 
-      {/* HÄR LÄGGER VI TILL DEN NYA MODALEN */}
       <LogbookComposer 
         isOpen={composerVisible}
         onClose={() => setComposerVisible(false)}
         onSave={() => setLogbookRefreshKey(prev => prev + 1)}
         currentUser={currentUser}
       />
-
     </div>
   );
 }
 
 // --- STYLES --- 
 const appShellStyle = { backgroundColor: '#F5F2ED', minHeight: '100vh' };
-const onboardingOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(245, 242, 237, 0.98)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' };
-const onboardingCardStyle = { backgroundColor: '#FAF9F6', borderRadius: '34px', width: '100%', maxWidth: '450px', boxShadow: '0 24px 60px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column' };
-const headerLogoImageStyle = { height: '42px', width: 'auto', display: 'block', objectFit: 'contain' };
-const mainContentStyle = { paddingTop: '90px', paddingBottom: '96px' };
 const headerShellStyle = { position: 'fixed', top: 0, left: 0, right: 0, zIndex: 4000, backgroundColor: 'rgba(248,247,243,0.95)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', boxShadow: '0 1px 0 rgba(47,93,58,0.04)' };
-const headerInnerStyle = { 
-  width: '100%', 
-  maxWidth: '1180px', 
-  margin: '0 auto', 
-  minHeight: '60px', // Sänkt från 74px
-  padding: '8px 12px', // Tajtare padding (från 12px 18px)
-  display: 'flex', 
-  alignItems: 'center', 
-  justifyContent: 'space-between', 
-  gap: '8px', // Mindre gap (från 14px)
-  boxSizing: 'border-box' 
-};
+const headerInnerStyle = { width: '100%', maxWidth: '1180px', margin: '0 auto', minHeight: '60px', padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', boxSizing: 'border-box' };
+const headerLogoImageStyle = { height: '52px', width: 'auto', display: 'block', objectFit: 'contain' };
 const headerRightStyle = { display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 };
-const headerPillStyle = { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderRadius: '999px', background: '#ECE9E1', color: '#2F5D3A', fontSize: '13px', fontWeight: 700, border: '1px solid rgba(47,93,58,0.06)' };
-const simulateStopBtnStyle = { position: 'fixed', left: '50%', bottom: '116px', transform: 'translateX(-50%)', backgroundColor: 'rgba(47, 93, 58, 0.12)', color: 'rgba(47, 93, 58, 0.82)', border: '1px solid rgba(47, 93, 58, 0.18)', padding: '10px 18px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, letterSpacing: '0.01em', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', boxShadow: '0 8px 20px rgba(0,0,0,0.05)', zIndex: 1700, cursor: 'pointer' };
+const mainContentStyle = { paddingTop: '60px', paddingBottom: '96px' };
+const navStyle = { position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(248,247,243,0.95)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', justifyContent: 'space-around', padding: '10px 0 calc(20px + env(safe-area-inset-bottom)) 0', boxShadow: '0 -2px 10px rgba(0,0,0,0.05)', zIndex: 1900 };
+const navItem = (active) => ({ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'none', border: 'none', color: active ? '#2F5D3A' : '#95A5A6', fontSize: '10px', fontWeight: active ? 700 : 500, cursor: 'pointer' });
+const primaryBtn = { width: '100%', backgroundColor: '#2F5D3A', color: 'white', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: 700, fontSize: '18px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center' };
+const secondaryBtn = { flex: 1, backgroundColor: '#EAE5DD', color: '#7C8A8D', border: 'none', borderRadius: '28px', fontWeight: 500, fontSize: '22px', cursor: 'pointer' };
+const inputStyle = { width: '100%', padding: '14px 14px', borderRadius: '14px', border: '2px solid #ECE7DF', marginBottom: '12px', fontSize: '16px', boxSizing: 'border-box', backgroundColor: '#FBFAF7', color: '#172026' };
+const onboardingOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(245, 242, 237, 0.98)', backdropFilter: 'blur(10px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' };
+const onboardingCardStyle = { backgroundColor: '#FAF9F6', borderRadius: '34px', width: '100%', maxWidth: '400px', boxShadow: '0 24px 60px rgba(0,0,0,0.12)', overflow: 'hidden', display: 'flex', flexDirection: 'column' };
+const onboardingHeaderStyle = { backgroundColor: '#f8f9f8', padding: '40px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'center', alignItems: 'center' };
+const onboardingLogoStyle = { height: '140px', width: '140px', borderRadius: '30px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' };
+const onboardingBodyStyle = { padding: '30px 25px', textAlign: 'center' };
+const onboardingTitleStyle = { fontSize: '1.2rem', fontWeight: '700', color: '#334247', margin: '0' };
+const onboardingSubtitleStyle = { fontSize: '0.85rem', color: '#667085', marginTop: '8px', lineHeight: '1.4' };
+const onboardingInputStyle = { width: '100%', padding: '16px', fontSize: '1rem', borderRadius: '12px', border: '2px solid #edf2f7', textAlign: 'center', marginBottom: '12px', outline: 'none', boxSizing: 'border-box' };
+const loginErrorStyle = { color: '#E74C3C', fontSize: '13px', fontWeight: 'bold', marginBottom: '15px' };
+const modalOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(24, 29, 26, 0.56)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, padding: '20px' };
+const modalStyle = { backgroundColor: '#FAF9F6', padding: '26px', borderRadius: '28px', width: '100%', maxWidth: '430px', boxShadow: '0 24px 60px rgba(0,0,0,0.18)' };
+const sheetTitleStyle = { margin: 0, fontSize: '18px', color: '#172026' };
+const modalHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' };
+const iconOnlyBtnStyle = { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const locationBtnStyle = { width: '100%', marginBottom: '12px', padding: '12px 14px', borderRadius: '14px', border: '1px solid #DCE5DA', backgroundColor: '#EEF3EA', color: '#2F5D3A', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' };
+const mediaBtnStyle = { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '13px', backgroundColor: '#ECE9E1', borderRadius: '14px', cursor: 'pointer', color: '#667276', fontWeight: 'bold', border: '1px solid #DDD7CC' };
+const saveBtnStyle = { width: '100%', padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '18px', fontWeight: 'bold', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', cursor: 'pointer' };
+const selectedFileBadge = { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', backgroundColor: '#EEF3EA', color: '#2F5D3A', borderRadius: '12px', fontSize: '13px', fontWeight: 600, marginBottom: '16px' };
+const actionSheetStyle = { width: '100%', maxWidth: '430px', backgroundColor: '#FAF9F6', borderRadius: '28px', padding: '14px 18px 18px 18px', boxShadow: '0 24px 60px rgba(0,0,0,0.18)' };
+const sheetHandleStyle = { width: '48px', height: '5px', borderRadius: '999px', backgroundColor: '#D9DDD6', margin: '0 auto 16px auto' };
+const actionSheetHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' };
+const actionSheetTextStyle = { margin: '0 0 16px 0', color: '#667276', fontSize: '14px', lineHeight: '1.5' };
+const sheetActionBtnStyle = { width: '100%', border: '1px solid #DDD7CC', backgroundColor: '#ECE9E1', color: '#2F5D3A', borderRadius: '16px', padding: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer', marginBottom: '10px' };
+const sheetCancelBtnStyle = { width: '100%', border: 'none', backgroundColor: '#1C2730', color: '#FFF', borderRadius: '16px', padding: '15px', fontWeight: 'bold', cursor: 'pointer' };
 const assistantOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 22, 19, 0.68)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', zIndex: 5000, padding: '20px 20px calc(96px + env(safe-area-inset-bottom)) 20px', transition: `opacity ${ASSISTANT_ANIMATION_MS}ms ease-in-out` };
 const bottomSheetStyle = { backgroundColor: '#FAF9F6', padding: '34px 32px 28px 32px', borderRadius: '34px', width: '100%', maxWidth: '850px', boxShadow: '0 24px 60px rgba(0,0,0,0.18)', transition: `transform ${ASSISTANT_ANIMATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${ASSISTANT_ANIMATION_MS}ms ease-in-out` };
 const assistantTitleStyle = { margin: 0, color: '#2F5D3A', fontSize: '28px', fontWeight: 800, lineHeight: 1.1 };
 const assistantLeadStyle = { margin: '28px 0 24px 0', color: '#657174', fontSize: '22px', lineHeight: 1.35 };
 const infoRowStyle = { display: 'flex', justifyContent: 'space-around', margin: '0 0 26px 0', padding: '24px 0', borderTop: '1px solid #E3E1DB', borderBottom: '1px solid #E3E1DB' };
 const iconBox = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: '#8B9798', fontSize: '16px', fontWeight: 500 };
-const primaryBtn = { backgroundColor: '#2F5D3A', color: 'white', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: 700, fontSize: '18px', cursor: 'pointer' };
-const secondaryBtn = { flex: 1, backgroundColor: '#EAE5DD', color: '#7C8A8D', border: 'none', borderRadius: '28px', fontWeight: 500, fontSize: '22px', cursor: 'pointer' };
-const modalOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(24, 29, 26, 0.56)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 5000, padding: '20px' };
-const modalStyle = { backgroundColor: '#FAF9F6', padding: '26px', borderRadius: '28px', width: '100%', maxWidth: '430px', boxShadow: '0 24px 60px rgba(0,0,0,0.18)' };
-const inputStyle = { width: '100%', padding: '14px 14px', borderRadius: '14px', border: '2px solid #ECE7DF', marginBottom: '12px', fontSize: '16px', boxSizing: 'border-box', backgroundColor: '#FBFAF7', color: '#172026' };
-const iconOnlyBtnStyle = { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#172026' };
-const locationBtnStyle = { width: '100%', marginTop: '-2px', marginBottom: '12px', padding: '12px 14px', borderRadius: '14px', border: '1px solid #DCE5DA', backgroundColor: '#EEF3EA', color: '#2F5D3A', fontSize: '14px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' };
-const mediaBtnStyle = { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '13px', backgroundColor: '#ECE9E1', borderRadius: '14px', cursor: 'pointer', color: '#667276', fontWeight: 'bold', border: '1px solid #DDD7CC' };
-const saveBtnStyle = { width: '100%', padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '18px', fontWeight: 'bold', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', cursor: 'pointer' };
-const actionSheetStyle = { width: '100%', maxWidth: '430px', backgroundColor: '#FAF9F6', borderRadius: '28px', padding: '14px 18px 18px 18px', boxShadow: '0 24px 60px rgba(0,0,0,0.18)' };
-const sheetHandleStyle = { width: '48px', height: '5px', borderRadius: '999px', backgroundColor: '#D9DDD6', margin: '0 auto 16px auto' };
-const actionSheetHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' };
-const actionSheetTextStyle = { margin: '0 0 16px 0', color: '#667276', fontSize: '14px', lineHeight: '1.5' };
-const sheetActionGridStyle = { display: 'grid', gridTemplateColumns: '1fr', gap: '10px', marginBottom: '14px' };
-const sheetActionBtnStyle = { width: '100%', border: '1px solid #DDD7CC', backgroundColor: '#ECE9E1', color: '#2F5D3A', borderRadius: '16px', padding: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer' };
-const sheetCancelBtnStyle = { width: '100%', border: 'none', backgroundColor: '#1C2730', color: '#FFF', borderRadius: '16px', padding: '15px', fontWeight: 'bold', cursor: 'pointer' };
-const navStyle = { position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(248,247,243,0.95)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', justifyContent: 'space-around', padding: '10px 0 calc(20px + env(safe-area-inset-bottom)) 0', boxShadow: '0 -2px 10px rgba(0,0,0,0.05)', zIndex: 1900 };
-const navItem = (active) => ({ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'none', border: 'none', color: active ? '#2F5D3A' : '#95A5A6', fontSize: '10px', fontWeight: active ? 700 : 500 });
-const sheetTitleStyle = { margin: 0, fontSize: '18px', color: '#172026' };
-const modalHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' };
-const selectedFileBadge = { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', backgroundColor: '#EEF3EA', color: '#2F5D3A', borderRadius: '12px', fontSize: '13px', fontWeight: 600, marginBottom: '16px' };
 
 export default App;

@@ -504,14 +504,18 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             <div style={sectionHeaderStyle}><Trophy size={14} color="#D8A826" /> DINA BUDDIES TIPSAR OM NÄSTA STOPP</div>
             <div style={miniCardStyle}>
               <h4 style={miniTitleStyle}>
-                {topProposal ? (
-                  <>
-                    <strong>{topProposal.created_by_name || 'En Buddy'}</strong> föreslår <strong>{topProposal.name}</strong> 
-                  </>
-                ) : (
-                  'Inga förslag ännu'
-                )}
-              </h4>
+  {topProposal ? (
+    <>
+      <strong>{topProposal.created_by_name || 'En Buddy'}</strong> föreslår <strong>
+        {topProposal.name.length > 40 
+          ? `${topProposal.name.substring(0, 40)}...` 
+          : topProposal.name}
+      </strong>
+    </>
+  ) : (
+    'Inga förslag ännu'
+  )}
+</h4>
             </div>
           </div>
           <div style={smallSectionStyle} onClick={() => setActiveTab('logbook')}>

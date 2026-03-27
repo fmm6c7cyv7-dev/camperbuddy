@@ -132,44 +132,34 @@ function buildMultiServiceIcon(serviceKeys) {
 
 const ALL_FILTERS_FALSE = { ...Object.keys(SERVICE_META).reduce((acc, key) => ({ ...acc, [key]: false }), {}), hidden_gems: false };
 
-// --- HUVUDKOMPONENT ---
 function ConvoyView({ currentUser }) {
-  // STATES
   const [proposals, setProposals] = useState([]);
   const [pois, setPois] = useState([]);
   const [communityPois, setCommunityPois] = useState({ officials: [] });
   const [activeFilters, setActiveFilters] = useState({ ...ALL_FILTERS_FALSE });
   const [flyTrigger, setFlyTrigger] = useState(0);
   const [focusMarker, setFocusMarker] = useState(null); 
-  
   const [findModalVisible, setFindModalVisible] = useState(false);
   const [findModalRendered, setFindModalRendered] = useState(false);
-  
   const [navModalVisible, setNavModalVisible] = useState(false);
   const [navModalRendered, setNavModalRendered] = useState(false);
   const [selectedNavPoi, setSelectedNavPoi] = useState(null);
-
   const [userLocation, setUserLocation] = useState(null);
   const [mapCenter, setMapCenter] = useState([59.61, 16.54]);
   const [mapZoom, setMapZoom] = useState(10);
-  
   const [tempMarker, setTempMarker] = useState(null);
   const [modalDraft, setModalDraft] = useState({ name: '', lat: null, lng: null });
   const [isConvoyFull, setIsConvoyFull] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showReplaceModal, setShowReplaceModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // --- EFFEKT VID START ---
   useEffect(() => { 
     fetchProposals(); 
     fetchPois(); 
-    
-    // Kolla om vi ska fokusera på en specifik plats (vinnaren från Dashboard)
     const convoyFocusRaw = sessionStorage.getItem('openConvoyFocus');
     if (convoyFocusRaw) {
       sessionStorage.removeItem('openConvoyFocus');
@@ -177,34 +167,25 @@ function ConvoyView({ currentUser }) {
       if (focusData.coords && focusData.coords[0] !== 0) {
         setMapCenter(focusData.coords);
         setMapZoom(focusData.zoom || 14);
-        setFocusMarker({
-          coords: focusData.coords,
-          name: focusData.name,
-          createdBy: focusData.createdBy
-        });
+        setFocusMarker({ coords: focusData.coords, name: focusData.name, createdBy: focusData.createdBy });
         setFlyTrigger(prev => prev + 1);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } else if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
+      navigator.geolocation.getCurrentPosition((position) => {
           const coords = [position.coords.latitude, position.coords.longitude];
           setUserLocation(coords);
           setMapCenter(coords);
-          setMapZoom(10);
           setFlyTrigger(prev => prev + 1);
         }
       );
     }
-
-    // MOTTAGAR-LOGIK FÖR "HITTA PLATSER"
     if (sessionStorage.getItem('openConvoySearch') === 'true') {
       sessionStorage.removeItem('openConvoySearch');
       setTimeout(() => openFindModal(), 300);
     }
   }, []);
 
-  // NOMINATIM AUTO-SÖK: Begränsat till NORDEN
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
       if (searchQuery.trim().length > 2) {
@@ -213,37 +194,11 @@ function ConvoyView({ currentUser }) {
           const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5&countrycodes=se,no,dk,fi,is`);
           const data = await res.json();
           setSearchResults(data);
-        } catch (e) {
-          console.error("Fel vid platssökning:", e);
-        } finally {
-          setIsSearching(false);
-        }
-      } else {
-        setSearchResults([]);
-      }
+        } catch (e) { console.error(e); } finally { setIsSearching(false); }
+      } else { setSearchResults([]); }
     }, 800);
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery]);
-
-  const handleShowProposalOnMap = (proposal) => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (proposal && proposal.latitude && proposal.longitude) {
-      const lat = parseFloat(proposal.latitude);
-      const lng = parseFloat(proposal.longitude);
-      setMapCenter([lat, lng]);
-      setMapZoom(10);
-      setFlyTrigger(prev => prev + 1);
-      setFocusMarker({
-        coords: [lat, lng],
-        name: proposal.name,
-        createdBy: proposal.created_by_name || 'En Buddy'
-      });
-    } else {
-      setTimeout(() => {
-        alert(`"${proposal.name}" lades tyvärr till utan karta och saknar koordinater.`);
-      }, 500);
-    }
-  };
 
   const fetchProposals = async () => {
     const { data } = await supabase.from('proposals').select('*').order('votes_up', { ascending: false });
@@ -272,7 +227,6 @@ function ConvoyView({ currentUser }) {
   const filteredPois = useMemo(() => {
     const activeKeys = Object.entries(activeFilters).filter(([k, v]) => v && k !== 'hidden_gems').map(([k]) => k);
     if (activeKeys.length === 0 && !searchQuery.trim()) return [];
-    
     return validPois.filter((poi) => {
       const matchesSearch = !searchQuery || poi.name?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesFilter = activeKeys.length === 0 || activeKeys.some(key => poi.serviceFlags[key]);
@@ -286,67 +240,38 @@ function ConvoyView({ currentUser }) {
     return regularHits + gemsHits;
   }, [filteredPois, activeFilters.hidden_gems, communityPois.officials, searchQuery]);
 
-  const getMarkerIconForPoi = (poi) => {
-    const keys = Object.keys(SERVICE_META).filter(k => poi.serviceFlags[k]);
-    if (keys.length === 1) return singleServiceIcons[keys[0]] || singleServiceIcons.default;
-    if (keys.length > 1) return buildMultiServiceIcon(keys);
-    return singleServiceIcons[poi.normalizedCategory] || singleServiceIcons.default;
-  };
-
   const handleVote = async (id, isUpvote) => {
     const proposal = proposals.find((p) => p.id === id);
     if (!proposal) return;
-    const updatePayload = isUpvote 
-      ? { votes_up: (proposal.votes_up || 0) + 1 }
-      : { votes_down: (proposal.votes_down || 0) + 1 };
+    const updatePayload = isUpvote ? { votes_up: (proposal.votes_up || 0) + 1 } : { votes_down: (proposal.votes_down || 0) + 1 };
     await supabase.from('proposals').update(updatePayload).eq('id', id);
     fetchProposals();
   };
 
-  const openFindModal = () => { setFindModalRendered(true); setTimeout(() => setFindModalVisible(true), 50); };
-  const closeFindModal = () => { setFindModalVisible(false); setTimeout(() => setFindModalRendered(false), 400); };
-  
-  const openNavModal = (poi) => {
-    setSelectedNavPoi(poi);
-    setNavModalRendered(true);
-    setTimeout(() => setNavModalVisible(true), 50);
+  const handleShowProposalOnMap = (proposal) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (proposal && proposal.latitude && proposal.longitude) {
+      const lat = parseFloat(proposal.latitude);
+      const lng = parseFloat(proposal.longitude);
+      setMapCenter([lat, lng]);
+      setMapZoom(10);
+      setFlyTrigger(prev => prev + 1);
+      setFocusMarker({ coords: [lat, lng], name: proposal.name, createdBy: proposal.created_by_name || 'En Buddy' });
+    }
   };
-
-  const closeNavModal = () => {
-    setNavModalVisible(false);
-    setTimeout(() => setNavModalRendered(false), 400);
-  };
-
-  const handleNavigate = (type) => {
-    if (!selectedNavPoi) return;
-    const lat = selectedNavPoi.lat || selectedNavPoi.latitude;
-    const lng = selectedNavPoi.lng || selectedNavPoi.longitude;
-    const url = type === 'waze' 
-      ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` 
-      : `http://maps.google.com/maps?q=${lat},${lng}`;
-    window.open(url, '_blank');
-    closeNavModal();
-  };
-
-  const toggleFilter = (key) => setActiveFilters(prev => ({ ...prev, [key]: !prev[key] }));
-  const selectAllFilters = () => setActiveFilters({ ...Object.keys(SERVICE_META).reduce((acc, k) => ({...acc, [k]: true}), {}), hidden_gems: true });
-  const clearAllFilters = () => setActiveFilters({ ...ALL_FILTERS_FALSE });
 
   const handleMapClick = async (latlng) => {
     setTempMarker(latlng);
     setMapCenter([latlng.lat, latlng.lng]);
     setFlyTrigger(prev => prev + 1); 
     setFocusMarker(null); 
-
     try {
       const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latlng.lat}&lon=${latlng.lng}&zoom=18&addressdetails=1`);
       const data = await res.json();
       const addr = data.address || {};
       const placeName = data.name || addr.caravan_site || addr.camp_site || addr.road || "Markerad plats";
       setModalDraft({ name: placeName, lat: latlng.lat, lng: latlng.lng });
-    } catch (e) { 
-      setModalDraft({ name: 'Markerad plats', lat: latlng.lat, lng: latlng.lng }); 
-    }
+    } catch (e) { setModalDraft({ name: 'Markerad plats', lat: latlng.lat, lng: latlng.lng }); }
   };
 
   const handleSelectSearchResult = (result) => {
@@ -364,15 +289,36 @@ function ConvoyView({ currentUser }) {
   };
 
   const triggerAddFlow = (draft) => { setModalDraft(draft); if (isConvoyFull) setShowReplaceModal(true); else setShowCreateModal(true); };
-
   const handleCreateNew = async () => {
     if (isSaving || !modalDraft.name) return;
     setIsSaving(true);
     await supabase.from('proposals').insert([{ name: modalDraft.name, latitude: modalDraft.lat, longitude: modalDraft.lng, votes_up: 1, user_id: currentUser?.id, created_by_name: currentUser?.name || 'Buddy' }]);
     setShowCreateModal(false); setTempMarker(null); fetchProposals(); setIsSaving(false);
   };
-
   const handleReplace = async (id) => { await supabase.from('proposals').delete().eq('id', id); handleCreateNew(); setShowReplaceModal(false); };
+
+  const openFindModal = () => { setFindModalRendered(true); setTimeout(() => setFindModalVisible(true), 50); };
+  const closeFindModal = () => { setFindModalVisible(false); setTimeout(() => setFindModalRendered(false), 400); };
+  const openNavModal = (poi) => { setSelectedNavPoi(poi); setNavModalRendered(true); setTimeout(() => setNavModalVisible(true), 50); };
+  const closeNavModal = () => { setNavModalVisible(false); setTimeout(() => setNavModalRendered(false), 400); };
+  const handleNavigate = (type) => {
+    if (!selectedNavPoi) return;
+    const lat = selectedNavPoi.lat || selectedNavPoi.latitude;
+    const lng = selectedNavPoi.lng || selectedNavPoi.longitude;
+    const url = type === 'waze' ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+    window.open(url, '_blank');
+    closeNavModal();
+  };
+
+  const toggleFilter = (key) => setActiveFilters(prev => ({ ...prev, [key]: !prev[key] }));
+  const selectAllFilters = () => setActiveFilters({ ...Object.keys(SERVICE_META).reduce((acc, k) => ({...acc, [k]: true}), {}), hidden_gems: true });
+  const clearAllFilters = () => setActiveFilters({ ...ALL_FILTERS_FALSE });
+  const getMarkerIconForPoi = (poi) => {
+    const keys = Object.keys(SERVICE_META).filter(k => poi.serviceFlags[k]);
+    if (keys.length === 1) return singleServiceIcons[keys[0]] || singleServiceIcons.default;
+    if (keys.length > 1) return buildMultiServiceIcon(keys);
+    return singleServiceIcons[poi.normalizedCategory] || singleServiceIcons.default;
+  };
 
   return (
     <div style={{ padding: '10px 20px 100px 20px', boxSizing: 'border-box' }}>
@@ -381,136 +327,31 @@ function ConvoyView({ currentUser }) {
           <ChangeView center={mapCenter} zoom={mapZoom} trigger={flyTrigger} />
           <MapEvents onMapClick={handleMapClick} />
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          
-          {userLocation && (
-              <Marker position={userLocation} icon={blueDotIcon} zIndexOffset={1000}>
-                <Popup><strong style={{ color: '#4285F4' }}>Du är här</strong></Popup>
-              </Marker>
-          )}
-
-          {focusMarker && (
-            <Marker position={focusMarker.coords} icon={redIcon}>
-              <Popup autoOpen>
-                <div style={{ textAlign: 'center', minWidth: '160px' }}>
-                  <h3 style={{ margin: '0 0 8px 0', color: '#2F5D3A', fontSize: '16px' }}>{focusMarker.name}</h3>
-                  <hr style={{ border: 'none', borderTop: '1px solid #EEE7DB', marginBottom: '10px' }} />
-                  <p style={{ fontSize: '11px', color: '#667276', marginBottom: '15px' }}>Tips från {focusMarker.createdBy}</p>
-                </div>
-              </Popup>
-            </Marker>
-          )}
-
-          {proposals.map(p => {
-             if (!p.latitude || !p.longitude) return null;
-             return (
-               <Marker key={p.id} position={[parseFloat(p.latitude), parseFloat(p.longitude)]} icon={redIcon}>
-                 <Popup>
-                   <div style={{ textAlign: 'center', minWidth: '180px' }}>
-                     <h3 style={{ margin: '0 0 8px 0', color: '#2F5D3A', fontSize: '16px' }}>{p.name}</h3>
-                     <hr style={{ border: 'none', borderTop: '1px solid #EEE7DB', marginBottom: '10px' }} />
-                     <p style={{ fontSize: '11px', color: '#667276', marginBottom: '15px' }}>Tips från {p.created_by_name}</p>
-                     <button onClick={() => openNavModal(p)} style={goButtonStyle}>Åk hit 🚐</button>
-                   </div>
-                 </Popup>
-               </Marker>
-             );
-          })}
-
-          {filteredPois.map(poi => (
-            <Marker key={poi.id} position={[poi.lat, poi.lng]} icon={getMarkerIconForPoi(poi)}>
-                <Popup>
-                    <div style={{ textAlign: 'center', minWidth: '180px' }}>
-                        <h3 style={{ margin: '0 0 8px 0', color: '#2F5D3A', fontSize: '16px' }}>{poi.name}</h3>
-                        <hr style={{ border: 'none', borderTop: '1px solid #EEE7DB', marginBottom: '10px' }} />
-                        <button onClick={() => openNavModal(poi)} style={goButtonStyle}>Åk hit 🚐</button>
-                        <button 
-                            onClick={() => triggerAddFlow(poi)} 
-                            style={{ ...goButtonStyle, backgroundColor: 'transparent', color: '#2F5D3A', marginTop: '8px', border: '1px solid #2F5D3A', boxShadow: 'none' }}
-                        >
-                            ➕ Föreslå för Konvoj
-                        </button>
-                    </div>
-                </Popup>
-            </Marker>
-          ))}
-          
-          {activeFilters.hidden_gems && communityPois.officials.map(p => {
-             if (!p.latitude || !p.longitude) return null;
-             return (
-                <Marker key={p.id} position={[parseFloat(p.latitude), parseFloat(p.longitude)]} icon={officialStarIcon}>
-                    <Popup>
-                        <div style={{ textAlign: 'center', minWidth: '160px' }}>
-                            <strong style={{ color: '#B8860B', display: 'block' }}>{p.name}</strong>
-                            <button onClick={() => openNavModal(p)} style={{...goButtonStyle, marginTop: '10px'}}>Åk hit 🚐</button>
-                        </div>
-                    </Popup>
-                </Marker>
-             );
-          })}
-
-          {tempMarker && (
-            <Marker position={tempMarker} icon={redIcon}>
-              <Popup autoOpen>
-                <div style={{ textAlign: 'center', minWidth: '180px' }}>
-                  <h3 style={{ margin: '0 0 8px 0', color: '#2F5D3A', fontSize: '16px' }}>Nytt resmål?</h3>
-                  <hr style={{ border: 'none', borderTop: '1px solid #EEE7DB', marginBottom: '10px' }} />
-                  <p style={{ fontSize: '12px', color: '#667276', marginBottom: '15px' }}>Vill du tipsa konvojen om den här platsen?</p>
-                  <button onClick={() => triggerAddFlow(modalDraft)} style={goButtonStyle}>➕ Föreslå plats</button>
-                </div>
-              </Popup>
-            </Marker>
-          )}
+          {userLocation && <Marker position={userLocation} icon={blueDotIcon} zIndexOffset={1000} />}
+          {focusMarker && <Marker position={focusMarker.coords} icon={redIcon}><Popup autoOpen><div style={{ textAlign: 'center' }}><h3>{focusMarker.name}</h3><p>Tips från {focusMarker.createdBy}</p></div></Popup></Marker>}
+          {proposals.map(p => (p.latitude && p.longitude && <Marker key={p.id} position={[p.latitude, p.longitude]} icon={redIcon}><Popup><div style={{ textAlign: 'center' }}><h3>{p.name}</h3><button onClick={() => openNavModal(p)} style={goButtonStyle}>Åk hit 🚐</button></div></Popup></Marker>))}
+          {filteredPois.map(poi => (<Marker key={poi.id} position={[poi.lat, poi.lng]} icon={getMarkerIconForPoi(poi)}><Popup><div style={{ textAlign: 'center' }}><h3>{poi.name}</h3><button onClick={() => openNavModal(poi)} style={goButtonStyle}>Åk hit 🚐</button><button onClick={() => triggerAddFlow(poi)} style={{ ...goButtonStyle, backgroundColor: 'transparent', color: '#2F5D3A', marginTop: '8px', border: '1px solid #2F5D3A' }}>➕ Föreslå</button></div></Popup></Marker>))}
+          {activeFilters.hidden_gems && communityPois.officials.map(p => (<Marker key={p.id} position={[p.latitude, p.longitude]} icon={officialStarIcon} />))}
+          {tempMarker && <Marker position={tempMarker} icon={redIcon}><Popup autoOpen><div style={{ textAlign: 'center' }}><h3>Nytt resmål?</h3><button onClick={() => triggerAddFlow(modalDraft)} style={goButtonStyle}>➕ Föreslå plats</button></div></Popup></Marker>}
         </MapContainer>
-        <div style={legendButtonStyle} onClick={openFindModal}><Search size={16} style={{marginRight:'8px', flexShrink: 0}}/><span>Hitta POIs</span></div>
+        <div style={legendButtonStyle} onClick={openFindModal}><Search size={16}/><span>Hitta POIs</span></div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', marginTop: '-10px' }}>
-          <button 
-  onClick={() => { 
-    if(userLocation) { 
-      setMapCenter([...userLocation]); 
-      setMapZoom(10); 
-      setFlyTrigger(prev => prev + 1); 
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } 
-  }} 
-  style={centerMapBtnStyle}
->
-            <Navigation size={14} /> Centrera karta
-          </button>
+          <button onClick={() => { if(userLocation) { setMapCenter([...userLocation]); setFlyTrigger(prev => prev + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); } }} style={centerMapBtnStyle}><Navigation size={14} /> Centrera karta</button>
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', width: '100%', boxSizing: 'border-box' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-          <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#999', flexShrink: 0 }} />
-          <input type="text" placeholder="Sök gata, stad eller POI..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={searchInputStyle} />
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#999' }} />
+          <input type="text" placeholder="Sök plats..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={searchInputStyle} />
           {searchResults.length > 0 && (
             <div style={searchResultsDropdownStyle}>
-              {searchResults.map((result) => (
-                <div key={result.place_id} onClick={() => handleSelectSearchResult(result)} style={searchResultItemStyle}>
-                  <MapPin size={16} color="#2F5D3A" style={{ flexShrink: 0 }} />
-                  <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#243137' }}>{result.name || result.display_name.split(',')[0]}</span>
-                    <span style={{ fontSize: '11px', color: '#667276', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{result.display_name}</span>
-                  </div>
-                </div>
-              ))}
+              {searchResults.map((r) => (<div key={r.place_id} onClick={() => handleSelectSearchResult(r)} style={searchResultItemStyle}><MapPin size={16}/><span>{r.name || r.display_name.split(',')[0]}</span></div>))}
             </div>
           )}
         </div>
-        <button 
-          onClick={() => {
-            if (!searchQuery.trim()) return;
-            if (searchQuery === modalDraft.name && modalDraft.lat) {
-              triggerAddFlow(modalDraft);
-            } else {
-              triggerAddFlow({ name: searchQuery, lat: null, lng: null });
-            }
-          }} 
-          style={addBtnStyle}
-        >
-          <Plus color="white" />
-        </button>
+        <button onClick={() => triggerAddFlow({ name: searchQuery, lat: null, lng: null })} style={addBtnStyle}><Plus color="white" /></button>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -521,21 +362,20 @@ function ConvoyView({ currentUser }) {
             <div key={p.id} style={{ ...proposalCardStyle, backgroundColor: isWinner ? '#FFFAEB' : '#FAF9F6', border: isWinner ? '1px solid #F0E2A3' : '1px solid #EEE7DB' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', color: '#2F5D3A', textDecoration: 'underline', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => handleShowProposalOnMap(p)}>
-                    {p.name} {isWinner && <Trophy size={16} color="#D8A826" />} 
+                  <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', color: '#2F5D3A', textDecoration: 'underline', cursor: 'pointer' }} onClick={() => handleShowProposalOnMap(p)}>
+                    {p.name.length > 40 ? `${p.name.substring(0, 40)}...` : p.name}
                   </h3>
                   <span style={{ fontSize: '12px', color: '#98A4A5' }}>Tips från {p.created_by_name}</span>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {isWinner && <Trophy size={20} color="#D8A826" style={{ marginRight: '4px' }} />}
                   <button onClick={() => handleVote(p.id, true)} style={{ ...voteBtnStyle, backgroundColor: '#E8F5E9', color: '#2e7d32' }}>
-                    <ThumbsUp size={16} style={{ marginRight: '4px' }} /> {p.votes_up || 0}
+                    <ThumbsUp size={16} /> {p.votes_up || 0}
                   </button>
                   <button onClick={() => handleVote(p.id, false)} style={{ ...voteBtnStyle, backgroundColor: '#FFEBEE', color: '#c62828' }}>
-                    <ThumbsDown size={16} style={{ marginRight: '4px' }} /> {p.votes_down || 0}
+                    <ThumbsDown size={16} /> {p.votes_down || 0}
                   </button>
-                  <button onClick={()=>{if(window.confirm("Ta bort förslag?")){supabase.from('proposals').delete().eq('id',p.id).then(()=>fetchProposals());}}} style={deleteBtnStyle}>
-                    <Trash2 size={18}/>
-                  </button>
+                  <button onClick={()=>{if(window.confirm("Ta bort?")){supabase.from('proposals').delete().eq('id',p.id).then(()=>fetchProposals());}}} style={deleteBtnStyle}><Trash2 size={18}/></button>
                 </div>
               </div>
             </div>
@@ -544,28 +384,20 @@ function ConvoyView({ currentUser }) {
       </div>
 
       {findModalRendered && (
-        <div style={{ ...modalOverlayStyle, opacity: findModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeFindModal}>
-          <div style={{ ...modalSheetStyle, transform: findModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ ...modalOverlayStyle, opacity: findModalVisible ? 1 : 0, transition: 'opacity 0.4s' }} onClick={closeFindModal}>
+          <div style={{ ...modalSheetStyle, transform: findModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s' }} onClick={e => e.stopPropagation()}>
             <div style={modalHandleStyle} />
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'15px'}}>
-              <div><h3 style={modalTitleStyle}>Filtrera på kartan</h3><p style={{margin:0, fontSize:'13px', color:'#667276'}}>Välj vad du vill se.</p></div>
-              <button onClick={closeFindModal} style={{background:'none', border:'none'}}><X size={24} color="#98A4A5"/></button>
-            </div>
+            <h3 style={modalTitleStyle}>Filtrera på kartan</h3>
             <div style={findGridStyle}>
-              {FILTER_CONFIG.map(({ key, icon: Icon, label }) => {
-                const isActive = activeFilters[key];
-                const color = key === 'hidden_gems' ? '#B8860B' : (SERVICE_META[key]?.color || '#999');
-                return (
-                  <button key={key} onClick={() => toggleFilter(key)} style={{ ...findOptionBtnStyle, opacity: isActive ? 1 : 0.4 }}>
-                    <div style={{ ...findIconWrapper, backgroundColor: isActive ? (SERVICE_META[key]?.lightBg || '#FFFDE7') : '#f5f5f5', border: isActive ? `2px solid ${color}` : '2px solid transparent' }}><Icon size={24} color={isActive ? color : '#999'} /></div>
-                    <span style={{ fontSize: '11px', fontWeight: '800', color: isActive ? '#334247' : '#999' }}>{label}</span>
-                  </button>
-                );
-              })}
+              {FILTER_CONFIG.map(({ key, icon: Icon, label }) => (
+                <button key={key} onClick={() => toggleFilter(key)} style={{ ...findOptionBtnStyle, opacity: activeFilters[key] ? 1 : 0.4 }}>
+                  <div style={findIconWrapper}><Icon size={24} /></div>
+                  <span style={{ fontSize: '11px' }}>{label}</span>
+                </button>
+              ))}
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
                <button onClick={clearAllFilters} style={secondaryModalBtnStyle}>Rensa</button>
-               <button onClick={selectAllFilters} style={secondaryModalBtnStyle}>Alla</button>
                <button onClick={closeFindModal} style={primaryModalBtnStyle}>Visa {currentHitsCount} resultat</button>
             </div>
           </div>
@@ -573,13 +405,13 @@ function ConvoyView({ currentUser }) {
       )}
 
       {navModalRendered && (
-        <div style={{ ...modalOverlayStyle, opacity: navModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeNavModal}>
-          <div style={{ ...modalSheetStyle, transform: navModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)', padding: '24px' }} onClick={e => e.stopPropagation()}>
+        <div style={{ ...modalOverlayStyle, opacity: navModalVisible ? 1 : 0 }} onClick={closeNavModal}>
+          <div style={modalSheetStyle} onClick={e => e.stopPropagation()}>
             <div style={modalHandleStyle} />
-            <h3 style={{ ...modalTitleStyle, textAlign: 'center' }}>Vill du åka till {selectedNavPoi?.name}?</h3>
+            <h3 style={{ textAlign: 'center' }}>Åk till {selectedNavPoi?.name}?</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '20px' }}>
-              <button onClick={() => handleNavigate('google')} style={navOptionBtnStyle}><Navigation size={20} color="#4285F4" style={{marginRight:'12px'}}/> Google Maps</button>
-              <button onClick={() => handleNavigate('waze')} style={navOptionBtnStyle}><Navigation size={20} color="#33CCFF" style={{marginRight:'12px'}}/> Waze</button>
+              <button onClick={() => handleNavigate('google')} style={navOptionBtnStyle}><Navigation size={20} /> Google Maps</button>
+              <button onClick={() => handleNavigate('waze')} style={navOptionBtnStyle}><Navigation size={20} /> Waze</button>
             </div>
             <button onClick={closeNavModal} style={cancelBtnStyle}>Avbryt</button>
           </div>
@@ -590,8 +422,8 @@ function ConvoyView({ currentUser }) {
         <div style={modalOverlayStyle} onClick={() => setShowCreateModal(false)}>
           <div style={modalSheetStyle} onClick={e => e.stopPropagation()}>
             <div style={modalHandleStyle} />
-            <h3 style={{ textAlign: 'center', margin: '0 0 8px 0', fontSize: '20px', color: '#243137' }}>Föreslå till konvojen</h3>
-            <input value={modalDraft.name} onChange={e => setModalDraft({...modalDraft, name: e.target.value})} style={searchInputStyle} placeholder="Namn på plats..."/>
+            <h3 style={{ textAlign: 'center' }}>Föreslå till konvojen</h3>
+            <input value={modalDraft.name} onChange={e => setModalDraft({...modalDraft, name: e.target.value})} style={searchInputStyle} />
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
               <button onClick={() => setShowCreateModal(false)} style={secondaryModalBtnStyle}>Avbryt</button>
               <button onClick={handleCreateNew} style={primaryModalBtnStyle}>Publicera</button>
@@ -603,18 +435,34 @@ function ConvoyView({ currentUser }) {
       {showReplaceModal && (
         <div style={modalOverlayStyle} onClick={() => setShowReplaceModal(false)}>
           <div style={modalSheetStyle} onClick={e => e.stopPropagation()}>
-            <h3 style={{ textAlign: 'center', marginBottom: '24px' }}>Byt ut förslag</h3>
+            <div style={modalHandleStyle} />
+            <h3 style={{ textAlign: 'center', marginBottom: '8px', fontWeight: '900' }}>Byt ut förslag</h3>
+            <p style={{ textAlign: 'center', fontSize: '13px', color: '#667276', marginBottom: '20px' }}>Välj ett av de två förslagen med minst stöd för att ge plats åt det nya.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {proposals.map((p, index) => {
-                const isLast = index === proposals.length - 1;
+                const isAtRisk = index >= proposals.length - 2;
                 return (
-                  <button key={p.id} onClick={() => isLast ? handleReplace(p.id) : null} disabled={!isLast} style={{ ...navOptionBtnStyle, opacity: isLast ? 1 : 0.4 }}>
-                    {p.name} {isLast && "(Utröstad)"}
+                  <button 
+                    key={p.id} 
+                    onClick={() => isAtRisk ? handleReplace(p.id) : null} 
+                    disabled={!isAtRisk} 
+                    style={{ 
+                      ...navOptionBtnStyle, 
+                      opacity: isAtRisk ? 1 : 0.4,
+                      borderColor: isAtRisk ? '#DCE5DA' : '#EEE7DB',
+                      backgroundColor: isAtRisk ? '#FFF' : '#F9F9F9'
+                    }}
+                  >
+                    <span style={{ flex: 1 }}>
+                      {p.name.length > 40 ? `${p.name.substring(0, 40)}...` : p.name} 
+                      {isAtRisk && <span style={{ color: '#E74C3C', marginLeft: '6px' }}>(Utröstad)</span>}
+                    </span>
+                    {isAtRisk && <span style={{ fontSize: '11px', fontWeight: '900', color: '#2F5D3A', backgroundColor: '#E8F5E9', padding: '4px 8px', borderRadius: '8px' }}>VÄLJ</span>}
                   </button>
                 );
               })}
             </div>
-            <button onClick={() => setShowReplaceModal(false)} style={cancelBtnStyle}>Avbryt</button>
+            <button onClick={() => setShowReplaceModal(false)} style={cancelBtnStyle}>Behåll nuvarande</button>
           </div>
         </div>
       )}
@@ -624,26 +472,7 @@ function ConvoyView({ currentUser }) {
 
 // --- STYLES ---
 const mapWrapperStyle = { height: '350px', borderRadius: '28px', overflow: 'hidden', marginBottom: '20px', border: '5px solid #F9F7F2', position: 'relative' };
-const legendButtonStyle = { 
-  position: 'absolute', 
-  top: '12px', // Vi flyttar upp den så den inte ligger mitt i Västerås/vattnet
-  left: '50%', 
-  transform: 'translateX(-50%)', 
-  zIndex: 1000, 
-  backgroundColor: 'rgba(255, 255, 255, 0.95)', // Lätt transparens
-  backdropFilter: 'blur(4px)', // Modern glas-effekt
-  padding: '8px 16px', // Mindre padding för slimmad look
-  borderRadius: '12px', // Matchar dina andra inputs/kort
-  display: 'flex', 
-  alignItems: 'center', 
-  gap: '8px', // Mellanrum mellan ikon och text
-  boxShadow: '0 4px 12px rgba(0,0,0,0.1)', 
-  border: '1px solid #EEE7DB',
-  cursor: 'pointer', 
-  fontSize: '13px', // Något mindre text för att kännas mer proffsig
-  fontWeight: '700',
-  color: '#47525d'
-};
+const legendButtonStyle = { position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, backgroundColor: 'rgba(255, 255, 255, 0.95)', padding: '8px 16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #EEE7DB', cursor: 'pointer', fontSize: '13px', fontWeight: '700', color: '#47525d' };
 const centerMapBtnStyle = { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FAF9F6', color: '#2F5D3A', border: '1px solid #E5E0D8', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' };
 const searchInputStyle = { width: '100%', padding: '14px 14px 14px 38px', borderRadius: '16px', border: '2px solid #ECE7DF', outline: 'none', backgroundColor: '#FAF9F6', boxSizing: 'border-box' };
 const searchResultsDropdownStyle = { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: '#FFF', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', border: '1px solid #ECE7DF', marginTop: '8px', zIndex: 4000, maxHeight: '250px', overflowY: 'auto' };
@@ -664,6 +493,6 @@ const findIconWrapper = { width: '56px', height: '56px', borderRadius: '18px', d
 const primaryModalBtnStyle = { flex: 2, padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '16px', fontWeight: 'bold' };
 const secondaryModalBtnStyle = { flex: 1, border: '1px solid #DDD6CA', backgroundColor: '#ECE9E1', borderRadius: '16px', padding: '14px 10px', fontSize: '13px', fontWeight: 'bold' };
 const navOptionBtnStyle = { width: '100%', padding: '16px', backgroundColor: 'white', border: '1px solid #EEE7DB', borderRadius: '16px', textAlign: 'left', fontWeight: '700', marginBottom: '8px', display: 'flex', alignItems: 'center' };
-const cancelBtnStyle = { width: '100%', padding: '12px', border: 'none', background: 'none', color: '#999', fontWeight: 'bold' };
+const cancelBtnStyle = { width: '100%', padding: '12px', border: 'none', background: 'none', color: '#999', fontWeight: 'bold', cursor: 'pointer' };
 
 export default ConvoyView;
