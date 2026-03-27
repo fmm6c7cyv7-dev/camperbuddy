@@ -3,7 +3,7 @@ import { supabase } from '../../services/supabaseClient';
 import {
   Trophy, Clock, Camera, Navigation, Map as MapIcon, Sun, Sunrise, Sunset, Cloud, Star,
   X, Save, Loader2, Plus, MapPin, Check, Droplet, Zap, CloudRain, CloudSun,
-  Share2, Clipboard, MessageSquare, Mail
+  Share2, Clipboard, MessageSquare, Mail, Users
 } from 'lucide-react';
 
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
@@ -122,6 +122,72 @@ const ALL_SERVICES_FALSE = Object.keys(SERVICE_META_ALL).reduce((acc, key) => ({
 // --- KOMPONENT START ---
 function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   
+  // --- NY KONVOJ-LOGIK (STARTA RESA) ---
+  const [showConvoyMenu, setShowConvoyMenu] = useState(false);
+  const [isLoadingConvoy, setIsLoadingConvoy] = useState(false);
+  const [activeConvoy, setActiveConvoy] = useState(null); // Sparar nuvarande rum
+
+  const generateJoinCode = () => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  };
+
+  const handleStartTrip = async (withInvite) => {
+    if (!currentUser) return alert("Du måste vara inloggad för att starta en resa.");
+    setIsLoadingConvoy(true);
+    
+    try {
+      const joinCode = generateJoinCode();
+      
+      // 1. Skapa "Rummet" i databasen
+      const { data: convoyData, error: convoyError } = await supabase
+        .from('convoys')
+        .insert([{ 
+          join_code: joinCode, 
+          created_by: currentUser.id, 
+          name: `${currentUser.name}s Resa` 
+        }])
+        .select()
+        .single();
+
+      if (convoyError) throw convoyError;
+
+      // 2. Placera dig själv i rummet
+      const { error: buddyError } = await supabase
+        .from('buddies')
+        .update({ current_convoy_id: convoyData.id })
+        .eq('id', currentUser.id);
+
+      if (buddyError) throw buddyError;
+
+      // Sätt det aktiva rummet lokalt så knappen ändrar sig direkt
+      setActiveConvoy({ id: convoyData.id, join_code: convoyData.join_code });
+
+      // 3. Hantera inbjudan (Magic Link)
+      if (withInvite) {
+        const shareUrl = `https://camper-buddy.vercel.app/?join=${joinCode}`;
+        if (navigator.share) {
+          await navigator.share({
+            title: 'Häng med i min CamperBuddy konvoj!',
+            text: 'Klicka på länken för att joina min resa på kartan:',
+            url: shareUrl
+          });
+        } else {
+          navigator.clipboard.writeText(shareUrl);
+          alert('Din inbjudningslänk är kopierad! Skicka den till dina vänner.');
+        }
+      }
+
+      setShowConvoyMenu(false);
+      if (typeof setActiveTab === 'function') setActiveTab('convoy');
+
+    } catch (err) {
+      console.error("Fel vid skapande av konvoj:", err);
+      alert("Kunde inte starta resan. Försök igen.");
+    } finally {
+      setIsLoadingConvoy(false);
+    }
+  };
+
   // FUNKTION: Går till vinnaren i Konvoj
   const handleGoToTopProposal = (proposal) => {
     if (proposal && proposal.latitude && proposal.longitude) {
@@ -132,13 +198,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         zoom: 15
       }));
     }
-    setActiveTab('convoy');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // FUNKTION: Öppnar Konvoj och Hitta platser-modalen direkt
-  const handleOpenSearch = () => {
-    sessionStorage.setItem('openConvoySearch', 'true');
     setActiveTab('convoy');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -173,7 +232,11 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   const [weather, setWeather] = useState({ temp: '--', sunrise: '--:--', sunset: '--:--', icon: <Sun size={18} color="#D8A826" /> });
 
   const [showShareModal, setShowShareModal] = useState(false);
-  const inviteLink = "https://camper-buddy.vercel.app/";
+  
+  // Uppdaterad inbjudningslänk (med join-kod om vi har ett aktivt rum)
+  const inviteLink = activeConvoy 
+    ? `https://camper-buddy.vercel.app/?join=${activeConvoy.join_code}` 
+    : "https://camper-buddy.vercel.app/";
 
   const shareViaOs = async () => {
     if (navigator.share) {
@@ -247,20 +310,72 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     }
   };
 
+  // --- SÄKER UPPFÖLJNING AV DATA ---
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const { data: propsData } = await supabase.from('proposals').select('*');
-      if (propsData?.length > 0) setTopProposal([...propsData].sort((a, b) => (b.votes_up || 0) - (a.votes_up || 0))[0]);
-      
-      const { data: logData } = await supabase.from('logbook').select('*').order('created_at', { ascending: false }).limit(1);
-      if (logData?.length > 0) setLatestEntry(logData[0]);
-      
+      // 1. Kolla om vi är i ett rum
+      let roomId = null;
+      if (currentUser?.id) {
+        const { data: buddyData } = await supabase
+          .from('buddies')
+          .select('current_convoy_id')
+          .eq('id', currentUser.id)
+          .single();
+
+        if (buddyData?.current_convoy_id) {
+          roomId = buddyData.current_convoy_id;
+          const { data: convoyData } = await supabase
+            .from('convoys')
+            .select('id, join_code')
+            .eq('id', buddyData.current_convoy_id)
+            .single();
+
+          if (convoyData) {
+            setActiveConvoy(convoyData);
+          }
+        }
+      }
+
+      // 2. Hämta FÖRSLAG (Säkerhetslåst till DITT rum)
+      if (roomId) {
+        const { data: propsData } = await supabase
+          .from('proposals')
+          .select('*')
+          .eq('convoy_id', roomId);
+
+        if (propsData && propsData.length > 0) {
+          setTopProposal([...propsData].sort((a, b) => (b.votes_up || 0) - (a.votes_up || 0))[0]);
+        } else {
+          setTopProposal(null);
+        }
+      } else {
+        setTopProposal(null);
+      }
+
+      // 3. Hämta LOGGBOK (Säkerhetslåst till DIN profil)
+      if (currentUser?.id) {
+        const { data: logData } = await supabase
+          .from('logbook')
+          .select('*')
+          .eq('buddy_id', currentUser.id) // Låset!
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (logData && logData.length > 0) {
+          setLatestEntry(logData[0]);
+        } else {
+          setLatestEntry(null);
+        }
+      }
+
+      // 4. Hämta POIs (Dessa är globala och ska synas för alla)
       const { data: poiData } = await supabase.from('pois').select('*').limit(10000);
       setPois(Array.isArray(poiData) ? poiData : []);
-      
+
       const { data: officialData } = await supabase.from('v_official_pois').select('*');
       setCommunityPois({ officials: officialData || [] });
+
     } catch (error) {
       console.error('Fel i dashboard:', error);
     } finally {
@@ -337,8 +452,8 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   };
 
   const toggleFilter = (key) => setActiveFilters((prev) => ({ ...prev, [key]: !prev[key] }));
-  const selectAllFilters = () => setActiveFilters({ ...ALL_FILTERS_TRUE });
-  const clearAllFilters = () => setActiveFilters({ parking: false, graywater: false, blackwater: false, freshwater: false, electricity: false, hidden_gems: false });
+  const selectAllFilters = () => setActiveFilters({ parking: true, graywater: true, blackwater: true, freshwater: true, electricity: true, hidden_gems: true });
+  const clearAllFilters = () => setActiveFilters({ ...ALL_FILTERS_OFF });
 
   const getMarkerIconForPoi = (poi) => {
     const activeKeys = Object.keys(QUICK_FILTERS).filter(k => activeFilters[k] && poi.serviceFlags[k]);
@@ -408,20 +523,24 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             </div>
           </div>
 
+          {/* DYNAMISK KNAPP: Byter färg och text om man redan är i en Konvoj */}
           <div 
-            onClick={() => setShowShareModal(true)}
+            onClick={() => activeConvoy ? setShowShareModal(true) : setShowConvoyMenu(true)}
             style={{ 
-              backgroundColor: '#F7F4EE', borderRadius: '20px', border: '1px solid #EEE7DB',
+              backgroundColor: activeConvoy ? '#EEF3EA' : '#F7F4EE', 
+              borderRadius: '20px', border: activeConvoy ? '1px solid #DCE5DA' : '1px solid #EEE7DB',
               padding: '12px 8px', flex: 1, display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer',
-              boxShadow: '0 4px 15px rgba(0,0,0,0.02)', textAlign: 'center'
+              boxShadow: '0 4px 15px rgba(0,0,0,0.02)', textAlign: 'center', transition: 'all 0.3s ease'
             }}
           >
-            <div style={{ width: '38px', height: '38px', backgroundColor: '#EEF3EA', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Share2 size={18} color="#2F5D3A" />
+            <div style={{ width: '38px', height: '38px', backgroundColor: activeConvoy ? '#DCE5DA' : '#EEF3EA', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {activeConvoy ? <Users size={18} color="#2F5D3A" /> : <Share2 size={18} color="#2F5D3A" />}
             </div>
             <div>
-              <h3 style={{ margin: '0', fontSize: '12px', color: '#172026', fontWeight: '800', lineHeight: '1.2' }}>Bjud in till<br/>konvoj</h3>
+              <h3 style={{ margin: '0', fontSize: '12px', color: '#172026', fontWeight: '800', lineHeight: '1.2' }}>
+                {activeConvoy ? <>Bjud in<br/>Buddies</> : <>Starta<br/>Resa</>}
+              </h3>
             </div>
           </div>
           
@@ -504,18 +623,18 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             <div style={sectionHeaderStyle}><Trophy size={14} color="#D8A826" /> DINA BUDDIES TIPSAR OM NÄSTA STOPP</div>
             <div style={miniCardStyle}>
               <h4 style={miniTitleStyle}>
-  {topProposal ? (
-    <>
-      <strong>{topProposal.created_by_name || 'En Buddy'}</strong> föreslår <strong>
-        {topProposal.name.length > 40 
-          ? `${topProposal.name.substring(0, 40)}...` 
-          : topProposal.name}
-      </strong>
-    </>
-  ) : (
-    'Inga förslag ännu'
-  )}
-</h4>
+                {topProposal ? (
+                  <>
+                    <strong>{topProposal.created_by_name || 'En Buddy'}</strong> föreslår <strong>
+                      {topProposal.name.length > 40 
+                        ? `${topProposal.name.substring(0, 40)}...` 
+                        : topProposal.name}
+                    </strong>
+                  </>
+                ) : (
+                  'Inga förslag ännu'
+                )}
+              </h4>
             </div>
           </div>
           <div style={smallSectionStyle} onClick={() => setActiveTab('logbook')}>
@@ -535,15 +654,82 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             <span style={btnLabelStyle}>Ta en bild till Loggboken</span>
           </button>
           <button style={actionBtnStyle} onClick={() => {
-  sessionStorage.setItem('openConvoySearch', 'true');
-  setActiveTab('convoy');
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}}>
-  <Navigation size={20} color="#CF651F" />
-  <span style={btnLabelStyle}>Hitta platser</span>
-</button>
+            sessionStorage.setItem('openConvoySearch', 'true');
+            setActiveTab('convoy');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}>
+            <Navigation size={20} color="#CF651F" />
+            <span style={btnLabelStyle}>Hitta platser</span>
+          </button>
         </div>
       </div>
+
+      {/* --- MODAL: STARTA RESA --- */}
+      {showConvoyMenu && (
+        <div 
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(24, 29, 26, 0.56)', zIndex: 5000, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }} 
+          onClick={() => setShowConvoyMenu(false)}
+        >
+          <div 
+            style={{ backgroundColor: '#FAF9F6', borderTopLeftRadius: '32px', borderTopRightRadius: '32px', padding: '24px 24px 40px 24px', animation: 'slideUp 0.3s ease-out' }} 
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ width: '48px', height: '5px', borderRadius: '999px', backgroundColor: '#D9DDD6', margin: '0 auto 20px auto' }} />
+            
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '22px', color: '#172026', fontWeight: '900', textAlign: 'center' }}>
+              Dags att rulla? 🚐
+            </h3>
+            <p style={{ margin: '0 0 24px 0', color: '#667276', fontSize: '14px', textAlign: 'center', lineHeight: '1.4' }}>
+              Starta en session för att aktivera den gemensamma kartan. Du kan alltid bjuda in fler senare.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* Alternativ 1: Soloresa */}
+              <button 
+                onClick={() => handleStartTrip(false)}
+                disabled={isLoadingConvoy}
+                style={{ width: '100%', padding: '18px', backgroundColor: '#FFF', border: '1px solid #EEE7DB', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}
+              >
+                <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#F5F5F5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ fontSize: '18px' }}>👤</span>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '15px', fontWeight: '800', color: '#243137', marginBottom: '2px' }}>Starta soloresa</div>
+                  <div style={{ fontSize: '12px', color: '#95A5A6' }}>Bara jag på kartan just nu</div>
+                </div>
+              </button>
+
+              {/* Alternativ 2: Bjud in vänner */}
+              <button 
+                onClick={() => handleStartTrip(true)}
+                disabled={isLoadingConvoy}
+                style={{ width: '100%', padding: '18px', backgroundColor: '#2F5D3A', border: 'none', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer', textAlign: 'left', boxShadow: '0 8px 16px rgba(47, 93, 58, 0.2)' }}
+              >
+                {isLoadingConvoy ? (
+                  <div style={{ width: '100%', textAlign: 'center', color: '#FFF' }}>Startar... <Loader2 size={16} className="animate-spin" style={{marginLeft: '8px', display: 'inline-block'}}/></div>
+                ) : (
+                  <>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Share2 size={20} color="#FFF" />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '15px', fontWeight: '800', color: '#FFF', marginBottom: '2px' }}>Konvoj med Buddies</div>
+                      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>Starta rum och skicka länk</div>
+                    </div>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <button 
+              onClick={() => setShowConvoyMenu(false)} 
+              style={{ width: '100%', padding: '16px', background: 'none', border: 'none', color: '#95A5A6', fontWeight: '700', fontSize: '15px', marginTop: '12px', cursor: 'pointer' }}
+            >
+              Avbryt
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* --- SHARE MODAL --- */}
       {showShareModal && (

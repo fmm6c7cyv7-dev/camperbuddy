@@ -111,6 +111,7 @@ function App() {
   const watchIdRef = useRef(null);
   const stopTimerRef = useRef(null);
   const assistantHideTimerRef = useRef(null);
+  const lastDbUpdateRef = useRef(0); // <-- NY: Håller koll på live-uppdateringar
 
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -128,10 +129,54 @@ function App() {
 
   const [composerDraft, setComposerDraft] = useState(emptyComposer);
 
+  // --- NY LOGIK FÖR INBJUDNINGSLÄNKAR ---
+  const handleJoinConvoy = async (joinCode, userProfile) => {
+    try {
+      const { data: convoyData, error: findError } = await supabase
+        .from('convoys')
+        .select('id')
+        .eq('join_code', joinCode)
+        .single();
+      
+      if (findError || !convoyData) {
+        alert("Denna konvoj finns tyvärr inte längre.");
+        return;
+      }
+      
+      const { error: updateError } = await supabase
+        .from('buddies')
+        .update({ current_convoy_id: convoyData.id })
+        .eq('id', userProfile.id);
+
+      if (!updateError) {
+        setActiveTab('convoy');
+      }
+    } catch (e) {
+      console.error("Kunde inte joina konvoj", e);
+    }
+  };
+
   useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const joinCode = urlParams.get('join');
+    
+    // Städa upp URL så man slipper se "?join=XXX" permanent
+    if (joinCode) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      sessionStorage.setItem('pendingJoinCode', joinCode);
+    }
+
     const savedProfile = localStorage.getItem('camperbuddy_profile');
+    
     if (savedProfile) {
-      setCurrentUser(JSON.parse(savedProfile));
+      const parsedProfile = JSON.parse(savedProfile);
+      setCurrentUser(parsedProfile);
+      
+      const pendingCode = sessionStorage.getItem('pendingJoinCode');
+      if (pendingCode) {
+        handleJoinConvoy(pendingCode, parsedProfile);
+        sessionStorage.removeItem('pendingJoinCode');
+      }
     } else {
       setShowOnboarding(true);
     }
@@ -175,6 +220,13 @@ function App() {
           localStorage.setItem('camperbuddy_profile', JSON.stringify(userProfile));
           setCurrentUser(userProfile);
           setShowOnboarding(false);
+
+          // Kolla om en magic link har väntat i bakgrunden
+          const pendingCode = sessionStorage.getItem('pendingJoinCode');
+          if (pendingCode) {
+            handleJoinConvoy(pendingCode, userProfile);
+            sessionStorage.removeItem('pendingJoinCode');
+          }
         } else {
           setLoginError("Fel PIN-kod för detta alias.");
           setNeedsConfirmation(false);
@@ -203,6 +255,13 @@ function App() {
         localStorage.setItem('camperbuddy_profile', JSON.stringify(userProfile));
         setCurrentUser(userProfile);
         setShowOnboarding(false);
+
+        // Kolla om en magic link har väntat i bakgrunden
+        const pendingCode = sessionStorage.getItem('pendingJoinCode');
+        if (pendingCode) {
+          handleJoinConvoy(pendingCode, userProfile);
+          sessionStorage.removeItem('pendingJoinCode');
+        }
       }
     } catch (err) {
       console.error(err);
@@ -286,7 +345,7 @@ function App() {
   };
 
   useEffect(() => {
-    if (activeTab !== 'home') {
+    if (activeTab !== 'home' && activeTab !== 'convoy') {
       if (stopTimerRef.current) {
         clearTimeout(stopTimerRef.current);
         stopTimerRef.current = null;
@@ -295,13 +354,28 @@ function App() {
       return undefined;
     }
     if (!navigator.geolocation) return undefined;
+    
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const rawSpeed = pos?.coords?.speed;
         if (rawSpeed == null || !Number.isFinite(rawSpeed)) return;
         const speedKmh = rawSpeed * 3.6;
+
+        // --- LIVE TRACKING (Skickas max var 15:e sekund) ---
+        const now = Date.now();
+        if (currentUser && (now - lastDbUpdateRef.current > 15000)) {
+          lastDbUpdateRef.current = now;
+          supabase.from('buddies').update({
+            last_lat: pos.coords.latitude,
+            last_lng: pos.coords.longitude,
+            last_speed: speedKmh,
+            last_updated: new Date().toISOString()
+          }).eq('id', currentUser.id).then();
+        }
+
+        // --- ASSISTANT LOGIK ---
         if (speedKmh <= STOP_THRESHOLD_KMH) {
-          if (!assistantMounted && !assistantVisible && !dismissedUntilMotion && !stopTimerRef.current) {
+          if (!assistantMounted && !assistantVisible && !dismissedUntilMotion && !stopTimerRef.current && activeTab === 'home') {
             stopTimerRef.current = setTimeout(() => {
               openAssistantModal();
               stopTimerRef.current = null;
@@ -323,7 +397,7 @@ function App() {
       if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
       if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
     };
-  }, [activeTab, assistantMounted, assistantVisible, dismissedUntilMotion]);
+  }, [activeTab, assistantMounted, assistantVisible, dismissedUntilMotion, currentUser]);
 
   const openComposer = (draft = {}) => {
     setComposerDraft({
@@ -508,7 +582,7 @@ function App() {
 
               <input
                 type="text"
-                placeholder="Ditt Alias (t.ex. BodilBobil)"
+                placeholder="Ditt Alias (t.ex. CamperBuddy123)"
                 value={onboardingName}
                 onChange={(e) => {
                   const val = e.target.value.replace(/\s+/g, '');
