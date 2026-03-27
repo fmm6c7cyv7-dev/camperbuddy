@@ -122,16 +122,25 @@ const ALL_SERVICES_FALSE = Object.keys(SERVICE_META_ALL).reduce((acc, key) => ({
 // --- KOMPONENT START ---
 function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   
+  // FUNKTION: Går till vinnaren i Konvoj
   const handleGoToTopProposal = (proposal) => {
     if (proposal && proposal.latitude && proposal.longitude) {
       sessionStorage.setItem('openConvoyFocus', JSON.stringify({
         coords: [parseFloat(proposal.latitude), parseFloat(proposal.longitude)],
+        name: proposal.name,
+        createdBy: proposal.created_by_name || 'En Buddy',
         zoom: 15
       }));
-      setActiveTab('convoy');
-    } else {
-      setActiveTab('convoy');
     }
+    setActiveTab('convoy');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // FUNKTION: Öppnar Konvoj och Hitta platser-modalen direkt
+  const handleOpenSearch = () => {
+    sessionStorage.setItem('openConvoySearch', 'true');
+    setActiveTab('convoy');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
   const [navModalVisible, setNavModalVisible] = useState(false);
@@ -312,7 +321,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     const lng = selectedNavPoi.lng || selectedNavPoi.longitude;
     const url = type === 'waze' 
       ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` 
-      : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+      : `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
     window.open(url, '_blank');
     closeNavModal();
   };
@@ -383,10 +392,9 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     <>
       <div style={{ padding: '10px 20px 100px 20px' }} className="animate-fade-in">
         
-        {/* --- NY LAYOUT: VÄDER (2/3) OCH INBJUDAN (1/3) SIDA VID SIDA --- */}
+        {/* --- NY LAYOUT: VÄDER OCH INBJUDAN --- */}
         <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'stretch' }}>
           
-          {/* VÄDER & PLATS (2/3 Vänster) */}
           <div style={{ ...weatherCardStyle, flex: 2, margin: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '14px 10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
               <MapPin size={16} color="#2F5D3A" />
@@ -400,31 +408,16 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             </div>
           </div>
 
-          {/* INBJUDAN (1/3 Höger) */}
           <div 
             onClick={() => setShowShareModal(true)}
             style={{ 
-              backgroundColor: '#F7F4EE', 
-              borderRadius: '20px', 
-              border: '1px solid #EEE7DB',
-              padding: '12px 8px', 
-              flex: 1,
-              display: 'flex', 
-              flexDirection: 'column',
-              alignItems: 'center', 
-              justifyContent: 'center',
-              gap: '8px',
-              cursor: 'pointer',
-              boxShadow: '0 4px 15px rgba(0,0,0,0.02)',
-              textAlign: 'center'
+              backgroundColor: '#F7F4EE', borderRadius: '20px', border: '1px solid #EEE7DB',
+              padding: '12px 8px', flex: 1, display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer',
+              boxShadow: '0 4px 15px rgba(0,0,0,0.02)', textAlign: 'center'
             }}
           >
-            <div style={{ 
-              width: '38px', height: '38px', 
-              backgroundColor: '#EEF3EA', 
-              borderRadius: '50%', 
-              display: 'flex', alignItems: 'center', justifyContent: 'center' 
-            }}>
+            <div style={{ width: '38px', height: '38px', backgroundColor: '#EEF3EA', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Share2 size={18} color="#2F5D3A" />
             </div>
             <div>
@@ -487,7 +480,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
           </MapContainer>
 
           <div style={legendButtonStyle} onClick={openFilterModal}>
-            <span style={{ fontSize: '10px', fontWeight: '800', color: '#95A5A6', marginRight: '2px' }}>POI</span>
+            <span style={{ fontSize: '10px', fontWeight: '800', color: '#95A5A5', marginRight: '2px' }}>POI</span>
             <div style={{ width: '1px', height: '12px', backgroundColor: '#E5DED2' }}></div>
             {Object.keys(QUICK_FILTERS).map(k => (
               <span key={k} style={{ ...dot, backgroundColor: activeFilters[k] ? QUICK_FILTERS[k].color : '#D5D8D1' }}></span>
@@ -499,13 +492,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', marginTop: '-10px' }}>
            <button 
-              onClick={() => { 
-                if(userLocation) { 
-                  setMapCenter([...userLocation]); 
-                  setMapZoom(10); 
-                  setFlyTrigger(prev => prev + 1); 
-                } 
-              }} 
+              onClick={() => { if(userLocation) { setMapCenter([...userLocation]); setMapZoom(10); setFlyTrigger(prev => prev + 1); } }} 
               style={centerMapBtnStyle}
            >
              <Navigation size={14} /> Centrera karta
@@ -544,16 +531,17 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             <span style={btnLabelStyle}>Ta en bild till Loggboken</span>
           </button>
           <button style={actionBtnStyle} onClick={() => {
-            sessionStorage.setItem('openConvoySearch', 'true');
-            setActiveTab('convoy');
-          }}>
-            <Navigation size={20} color="#CF651F" />
-            <span style={btnLabelStyle}>Hitta platser</span>
-          </button>
+  sessionStorage.setItem('openConvoySearch', 'true');
+  setActiveTab('convoy');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}}>
+  <Navigation size={20} color="#CF651F" />
+  <span style={btnLabelStyle}>Hitta platser</span>
+</button>
         </div>
       </div>
 
-      {/* --- MODALER --- */}
+      {/* --- SHARE MODAL --- */}
       {showShareModal && (
         <div style={{ ...modalOverlayStyle, opacity: 1, zIndex: 6000 }} onClick={() => setShowShareModal(false)}>
           <div style={{ ...modalSheetStyle, padding: '24px' }} className="animate-slide-up" onClick={(e) => e.stopPropagation()}>
@@ -562,35 +550,22 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
               <h2 style={{ margin: 0, fontSize: '20px', color: '#172026', fontWeight: '800' }}>Bjud in vänner</h2>
               <button onClick={() => setShowShareModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} color="#667276" /></button>
             </div>
-            
-            <p style={{ fontSize: '14px', color: '#667276', marginBottom: '24px', lineHeight: '1.4' }}>
-              Dela inbjudningslänken så kan dina Buddies ansluta och se era gemensamma resplaner.
-            </p>
-
+            <p style={{ fontSize: '14px', color: '#667276', marginBottom: '24px', lineHeight: '1.4' }}>Dela inbjudningslänken så kan dina Buddies ansluta.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {navigator.share && (
-                <button type="button" onClick={shareViaOs} style={shareMainBtnStyle}>
-                  <Share2 size={20} /> Dela via telefonen
-                </button>
+                <button type="button" onClick={shareViaOs} style={shareMainBtnStyle}><Share2 size={20} /> Dela via telefonen</button>
               )}
-              
-              <button type="button" onClick={copyToClipboard} style={shareSecondaryBtnStyle}>
-                <Clipboard size={18} /> Kopiera inbjudningslänk
-              </button>
-
+              <button type="button" onClick={copyToClipboard} style={shareSecondaryBtnStyle}><Clipboard size={18} /> Kopiera inbjudningslänk</button>
               <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
-                <a href={shareViaSmsUrl} style={{ ...shareSecondaryBtnStyle, flex: 1, textDecoration: 'none' }}>
-                  <MessageSquare size={18} /> SMS
-                </a>
-                <a href={shareViaEmailUrl} style={{ ...shareSecondaryBtnStyle, flex: 1, textDecoration: 'none' }}>
-                  <Mail size={18} /> E-post
-                </a>
+                <a href={shareViaSmsUrl} style={{ ...shareSecondaryBtnStyle, flex: 1, textDecoration: 'none' }}><MessageSquare size={18} /> SMS</a>
+                <a href={shareViaEmailUrl} style={{ ...shareSecondaryBtnStyle, flex: 1, textDecoration: 'none' }}><Mail size={18} /> E-post</a>
               </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* --- FILTER MODAL --- */}
       {filterModalRendered && (
         <div style={{ ...modalOverlayStyle, opacity: filterModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeFilterModal}>
           <div style={{ ...modalSheetStyle, transform: filterModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)' }} onClick={(e) => e.stopPropagation()}>
@@ -614,6 +589,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         </div>
       )}
 
+      {/* --- CREATE POI MODAL --- */}
       {showCreateModal && (
         <div style={modalOverlayStyle} onClick={() => setShowCreateModal(false)}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
@@ -637,6 +613,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         </div>
       )}
 
+      {/* --- NAVIGATION MODAL --- */}
       {navModalRendered && (
         <div style={{ ...modalOverlayStyle, opacity: navModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeNavModal}>
           <div style={{ ...modalSheetStyle, transform: navModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)', padding: '20px 24px 40px 24px' }} onClick={e => e.stopPropagation()}>
@@ -654,7 +631,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   );
 }
 
-// --- ALLA STYLES LIGGER HÄR UNDER ---
+// --- STYLES ---
 const loadingStateStyle = { textAlign: 'center', marginTop: '100px', color: '#8B9798' };
 const weatherCardStyle = { background: '#F7F4EE', border: '1px solid #E8E1D6', borderRadius: '20px', padding: '12px 16px', marginBottom: '14px' };
 const weatherItemStyle = { display: 'flex', alignItems: 'center', gap: '5px' };

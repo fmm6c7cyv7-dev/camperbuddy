@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import { 
   ThumbsUp, ThumbsDown, Trash2, Plus, Search, Loader2, X, Save, ArrowRightLeft,
-  MapPin, Tent, Coffee, Flame, Anchor, Waves, Droplet, Zap, ArrowDown, Star, Camera, Navigation
+  MapPin, Tent, Coffee, Flame, Anchor, Waves, Droplet, Zap, ArrowDown, Star, Camera, Navigation, Trophy
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -169,25 +169,21 @@ function ConvoyView({ currentUser }) {
     fetchProposals(); 
     fetchPois(); 
     
-    // Kolla om vi ska fokusera på en specifik plats (från Dashboard)
+    // Kolla om vi ska fokusera på en specifik plats (vinnaren från Dashboard)
     const convoyFocusRaw = sessionStorage.getItem('openConvoyFocus');
     if (convoyFocusRaw) {
       sessionStorage.removeItem('openConvoyFocus');
       const focusData = JSON.parse(convoyFocusRaw);
-      if (focusData.coords) {
-          setMapCenter(focusData.coords);
-          setMapZoom(focusData.zoom || 14);
-          
-          // Sätt markören så platsen faktiskt får en röd prick!
-          setFocusMarker({
-            coords: focusData.coords,
-            name: focusData.name || 'Föreslagen plats',
-            createdBy: focusData.createdBy || 'En Buddy'
-          });
-          
-          setFlyTrigger(prev => prev + 1);
-          // Auto-scrolla upp till kartan
-          setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
+      if (focusData.coords && focusData.coords[0] !== 0) {
+        setMapCenter(focusData.coords);
+        setMapZoom(focusData.zoom || 14);
+        setFocusMarker({
+          coords: focusData.coords,
+          name: focusData.name,
+          createdBy: focusData.createdBy
+        });
+        setFlyTrigger(prev => prev + 1);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } else if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -195,17 +191,15 @@ function ConvoyView({ currentUser }) {
           const coords = [position.coords.latitude, position.coords.longitude];
           setUserLocation(coords);
           setMapCenter(coords);
-          setMapZoom(10); 
           setFlyTrigger(prev => prev + 1);
-        },
-        () => console.warn("Kunde inte hämta plats"),
-        { timeout: 5000 }
+        }
       );
     }
 
+    // MOTTAGAR-LOGIK FÖR "HITTA PLATSER"
     if (sessionStorage.getItem('openConvoySearch') === 'true') {
-        sessionStorage.removeItem('openConvoySearch');
-        setTimeout(() => openFindModal(), 300);
+      sessionStorage.removeItem('openConvoySearch');
+      setTimeout(() => openFindModal(), 300);
     }
   }, []);
 
@@ -230,26 +224,20 @@ function ConvoyView({ currentUser }) {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery]);
 
-  // Funktion för att visa ett tips från listan på kartan
   const handleShowProposalOnMap = (proposal) => {
-    // 1. Scrolla upp till kartan omedelbart när man klickar
     window.scrollTo({ top: 0, behavior: 'smooth' });
-
     if (proposal && proposal.latitude && proposal.longitude) {
       const lat = parseFloat(proposal.latitude);
       const lng = parseFloat(proposal.longitude);
-      
       setMapCenter([lat, lng]);
       setMapZoom(14);
       setFlyTrigger(prev => prev + 1);
-
       setFocusMarker({
         coords: [lat, lng],
         name: proposal.name,
         createdBy: proposal.created_by_name || 'En Buddy'
       });
     } else {
-      // 2. Berätta för användaren om platsen saknar koordinater
       setTimeout(() => {
         alert(`"${proposal.name}" lades tyvärr till utan karta och saknar koordinater.`);
       }, 500);
@@ -334,7 +322,7 @@ function ConvoyView({ currentUser }) {
     const lng = selectedNavPoi.lng || selectedNavPoi.longitude;
     const url = type === 'waze' 
       ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` 
-      : `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+      : `http://maps.google.com/maps?q=${lat},${lng}`;
     window.open(url, '_blank');
     closeNavModal();
   };
@@ -363,16 +351,12 @@ function ConvoyView({ currentUser }) {
   const handleSelectSearchResult = (result) => {
     const lat = parseFloat(result.lat);
     const lon = parseFloat(result.lon);
-    
     const cleanName = result.name || result.display_name.split(',')[0];
-
     setMapCenter([lat, lon]);
     setMapZoom(14);
     setFlyTrigger(prev => prev + 1);
-
     setTempMarker({ lat, lng: lon });
     setModalDraft({ name: cleanName, lat, lng: lon });
-
     setSearchQuery(cleanName); 
     setSearchResults([]); 
     setFocusMarker(null); 
@@ -417,7 +401,18 @@ function ConvoyView({ currentUser }) {
 
           {proposals.map(p => {
              if (!p.latitude || !p.longitude) return null;
-             return <Marker key={p.id} position={[parseFloat(p.latitude), parseFloat(p.longitude)]} icon={redIcon}><Popup><strong>{p.name}</strong></Popup></Marker>
+             return (
+               <Marker key={p.id} position={[parseFloat(p.latitude), parseFloat(p.longitude)]} icon={redIcon}>
+                 <Popup>
+                   <div style={{ textAlign: 'center', minWidth: '180px' }}>
+                     <h3 style={{ margin: '0 0 8px 0', color: '#2F5D3A', fontSize: '16px' }}>{p.name}</h3>
+                     <hr style={{ border: 'none', borderTop: '1px solid #EEE7DB', marginBottom: '10px' }} />
+                     <p style={{ fontSize: '11px', color: '#667276', marginBottom: '15px' }}>Tips från {p.created_by_name}</p>
+                     <button onClick={() => openNavModal(p)} style={goButtonStyle}>Åk hit 🚐</button>
+                   </div>
+                 </Popup>
+               </Marker>
+             );
           })}
 
           {filteredPois.map(poi => (
@@ -426,9 +421,7 @@ function ConvoyView({ currentUser }) {
                     <div style={{ textAlign: 'center', minWidth: '180px' }}>
                         <h3 style={{ margin: '0 0 8px 0', color: '#2F5D3A', fontSize: '16px' }}>{poi.name}</h3>
                         <hr style={{ border: 'none', borderTop: '1px solid #EEE7DB', marginBottom: '10px' }} />
-                        <button onClick={() => openNavModal(poi)} style={goButtonStyle}>
-                            Åk hit 🚐
-                        </button>
+                        <button onClick={() => openNavModal(poi)} style={goButtonStyle}>Åk hit 🚐</button>
                         <button 
                             onClick={() => triggerAddFlow(poi)} 
                             style={{ ...goButtonStyle, backgroundColor: 'transparent', color: '#2F5D3A', marginTop: '8px', border: '1px solid #2F5D3A', boxShadow: 'none' }}
@@ -454,19 +447,14 @@ function ConvoyView({ currentUser }) {
              );
           })}
 
-          {/* Snygg popup för klick på kartan */}
           {tempMarker && (
             <Marker position={tempMarker} icon={redIcon}>
               <Popup autoOpen>
                 <div style={{ textAlign: 'center', minWidth: '180px' }}>
                   <h3 style={{ margin: '0 0 8px 0', color: '#2F5D3A', fontSize: '16px' }}>Nytt resmål?</h3>
                   <hr style={{ border: 'none', borderTop: '1px solid #EEE7DB', marginBottom: '10px' }} />
-                  <p style={{ fontSize: '12px', color: '#667276', marginBottom: '15px', marginTop: 0 }}>
-                    Vill du tipsa konvojen om den här platsen?
-                  </p>
-                  <button onClick={() => triggerAddFlow(modalDraft)} style={goButtonStyle}>
-                    ➕ Föreslå plats
-                  </button>
+                  <p style={{ fontSize: '12px', color: '#667276', marginBottom: '15px' }}>Vill du tipsa konvojen om den här platsen?</p>
+                  <button onClick={() => triggerAddFlow(modalDraft)} style={goButtonStyle}>➕ Föreslå plats</button>
                 </div>
               </Popup>
             </Marker>
@@ -487,46 +475,27 @@ function ConvoyView({ currentUser }) {
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', width: '100%', boxSizing: 'border-box' }}>
         <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
           <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#999', flexShrink: 0 }} />
-          <input 
-            type="text" 
-            placeholder="Sök gata, stad eller POI..." 
-            value={searchQuery} 
-            onChange={(e) => setSearchQuery(e.target.value)} 
-            style={searchInputStyle} 
-          />
-          
+          <input type="text" placeholder="Sök gata, stad eller POI..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={searchInputStyle} />
           {searchResults.length > 0 && (
             <div style={searchResultsDropdownStyle}>
               {searchResults.map((result) => (
-                <div 
-                  key={result.place_id} 
-                  onClick={() => handleSelectSearchResult(result)}
-                  style={searchResultItemStyle}
-                >
+                <div key={result.place_id} onClick={() => handleSelectSearchResult(result)} style={searchResultItemStyle}>
                   <MapPin size={16} color="#2F5D3A" style={{ flexShrink: 0 }} />
                   <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#243137' }}>
-                      {result.name || result.display_name.split(',')[0]}
-                    </span>
-                    <span style={{ fontSize: '11px', color: '#667276', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
-                      {result.display_name}
-                    </span>
+                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#243137' }}>{result.name || result.display_name.split(',')[0]}</span>
+                    <span style={{ fontSize: '11px', color: '#667276', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{result.display_name}</span>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
-
         <button 
           onClick={() => {
-            if (!searchQuery.trim()) return; // Förhindra att man lägger till tomma förslag
-            
-            // Om texten i sökfältet matchar platsen vi precis klickade fram på kartan, använd de koordinaterna!
+            if (!searchQuery.trim()) return;
             if (searchQuery === modalDraft.name && modalDraft.lat) {
               triggerAddFlow(modalDraft);
             } else {
-              // Om man bara har skrivit en egen text (utan att välja på kartan)
               triggerAddFlow({ name: searchQuery, lat: null, lng: null });
             }
           }} 
@@ -538,32 +507,32 @@ function ConvoyView({ currentUser }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div style={countInfoStyle}>{proposals.length} av 5 förslag använda</div>
-        {proposals.map(p => (
-          <div key={p.id} style={proposalCardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <h3 
-                  style={{ margin: '0 0 4px 0', fontSize: '18px', color: '#2F5D3A', textDecoration: 'underline', cursor: 'pointer' }} 
-                  onClick={() => handleShowProposalOnMap(p)}
-                >
-                  {p.name}
-                </h3>
-                <span style={{ fontSize: '12px', color: '#98A4A5' }}>Tips från {p.created_by_name}</span>
-              </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button onClick={() => handleVote(p.id, true)} style={{ ...voteBtnStyle, backgroundColor: '#E8F5E9', color: '#2e7d32' }}>
-                  <ThumbsUp size={16} style={{ marginRight: '4px' }} /> {p.votes_up || 0}
-                </button>
-                <button onClick={() => handleVote(p.id, false)} style={{ ...voteBtnStyle, backgroundColor: '#FFEBEE', color: '#c62828' }}>
-                  <ThumbsDown size={16} style={{ marginRight: '4px' }} /> {p.votes_down || 0}
-                </button>
-                <button onClick={()=>{if(window.confirm("Ta bort förslag?")){supabase.from('proposals').delete().eq('id',p.id).then(()=>fetchProposals());}}} style={deleteBtnStyle}>
-                  <Trash2 size={18}/>
-                </button>
+        {proposals.map((p, index) => {
+          const isWinner = index === 0 && (p.votes_up || 0) > 0; 
+          return (
+            <div key={p.id} style={{ ...proposalCardStyle, backgroundColor: isWinner ? '#FFFAEB' : '#FAF9F6', border: isWinner ? '1px solid #F0E2A3' : '1px solid #EEE7DB' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', color: '#2F5D3A', textDecoration: 'underline', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => handleShowProposalOnMap(p)}>
+                    {p.name} {isWinner && <Trophy size={16} color="#D8A826" />} 
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#98A4A5' }}>Tips från {p.created_by_name}</span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <button onClick={() => handleVote(p.id, true)} style={{ ...voteBtnStyle, backgroundColor: '#E8F5E9', color: '#2e7d32' }}>
+                    <ThumbsUp size={16} style={{ marginRight: '4px' }} /> {p.votes_up || 0}
+                  </button>
+                  <button onClick={() => handleVote(p.id, false)} style={{ ...voteBtnStyle, backgroundColor: '#FFEBEE', color: '#c62828' }}>
+                    <ThumbsDown size={16} style={{ marginRight: '4px' }} /> {p.votes_down || 0}
+                  </button>
+                  <button onClick={()=>{if(window.confirm("Ta bort förslag?")){supabase.from('proposals').delete().eq('id',p.id).then(()=>fetchProposals());}}} style={deleteBtnStyle}>
+                    <Trash2 size={18}/>
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {findModalRendered && (
@@ -600,8 +569,7 @@ function ConvoyView({ currentUser }) {
           <div style={{ ...modalSheetStyle, transform: navModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)', padding: '24px' }} onClick={e => e.stopPropagation()}>
             <div style={modalHandleStyle} />
             <h3 style={{ ...modalTitleStyle, textAlign: 'center' }}>Vill du åka till {selectedNavPoi?.name}?</h3>
-            <p style={{ textAlign: 'center', color: '#667276', marginBottom: '25px', fontSize: '14px' }}>Välj din favoritapp för navigering.</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '20px' }}>
               <button onClick={() => handleNavigate('google')} style={navOptionBtnStyle}><Navigation size={20} color="#4285F4" style={{marginRight:'12px'}}/> Google Maps</button>
               <button onClick={() => handleNavigate('waze')} style={navOptionBtnStyle}><Navigation size={20} color="#33CCFF" style={{marginRight:'12px'}}/> Waze</button>
             </div>
@@ -610,67 +578,31 @@ function ConvoyView({ currentUser }) {
         </div>
       )}
 
-      {/* Skapa ny plats modal */}
       {showCreateModal && (
         <div style={modalOverlayStyle} onClick={() => setShowCreateModal(false)}>
           <div style={modalSheetStyle} onClick={e => e.stopPropagation()}>
             <div style={modalHandleStyle} />
             <h3 style={{ textAlign: 'center', margin: '0 0 8px 0', fontSize: '20px', color: '#243137' }}>Föreslå till konvojen</h3>
-            <p style={{ textAlign: 'center', color: '#667276', fontSize: '14px', marginTop: '0', marginBottom: '20px' }}>Vad heter platsen du vill tipsa om?</p>
-            <input 
-              value={modalDraft.name} 
-              onChange={e => setModalDraft({...modalDraft, name: e.target.value})} 
-              style={searchInputStyle} 
-              placeholder="T.ex. Mysig ställplats vid vattnet..."
-            />
+            <input value={modalDraft.name} onChange={e => setModalDraft({...modalDraft, name: e.target.value})} style={searchInputStyle} placeholder="Namn på plats..."/>
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
               <button onClick={() => setShowCreateModal(false)} style={secondaryModalBtnStyle}>Avbryt</button>
-              <button onClick={handleCreateNew} style={primaryModalBtnStyle}>Publicera tips</button>
+              <button onClick={handleCreateNew} style={primaryModalBtnStyle}>Publicera</button>
             </div>
           </div>
         </div>
       )}
       
-      {/* Byt ut Modal med utgråad lista */}
       {showReplaceModal && (
         <div style={modalOverlayStyle} onClick={() => setShowReplaceModal(false)}>
           <div style={modalSheetStyle} onClick={e => e.stopPropagation()}>
-            <h3 style={{ textAlign: 'center', margin: '0 0 6px 0', fontSize: '18px', color: '#243137' }}>
-              Konvojens förslag till nästa resmål
-            </h3>
-            <p style={{ textAlign: 'center', color: '#667276', fontSize: '14px', marginTop: '0', marginBottom: '24px' }}>
-              Max 5 förslag. Vill du byta ut förslaget som är utröstat?
-            </p>
+            <h3 style={{ textAlign: 'center', marginBottom: '24px' }}>Byt ut förslag</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {proposals.map((p, index) => {
                 const isLast = index === proposals.length - 1;
                 return (
-                  <React.Fragment key={p.id}>
-                    {isLast && proposals.length > 1 && (
-                      <div style={{ display: 'flex', alignItems: 'center', margin: '6px 0' }}>
-                        <div style={{ flex: 1, height: '1px', backgroundColor: '#E74C3C' }}></div>
-                        <span style={{ color: '#E74C3C', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', padding: '0 10px' }}>
-                          Utröstad
-                        </span>
-                        <div style={{ flex: 1, height: '1px', backgroundColor: '#E74C3C' }}></div>
-                      </div>
-                    )}
-                    <button 
-                      onClick={() => isLast ? handleReplace(p.id) : null}
-                      disabled={!isLast}
-                      style={{ 
-                        ...navOptionBtnStyle, 
-                        justifyContent: 'center', 
-                        textAlign: 'center',
-                        borderColor: isLast ? '#FADBD8' : '#EEE7DB',
-                        opacity: isLast ? 1 : 0.4, 
-                        cursor: isLast ? 'pointer' : 'default',
-                        color: isLast ? '#243137' : '#98A4A5'
-                      }}
-                    >
-                      {p.name}
-                    </button>
-                  </React.Fragment>
+                  <button key={p.id} onClick={() => isLast ? handleReplace(p.id) : null} disabled={!isLast} style={{ ...navOptionBtnStyle, opacity: isLast ? 1 : 0.4 }}>
+                    {p.name} {isLast && "(Utröstad)"}
+                  </button>
                 );
               })}
             </div>
@@ -684,28 +616,27 @@ function ConvoyView({ currentUser }) {
 
 // --- STYLES ---
 const mapWrapperStyle = { height: '350px', borderRadius: '28px', overflow: 'hidden', marginBottom: '20px', border: '5px solid #F9F7F2', position: 'relative' };
-const legendButtonStyle = { position: 'absolute', bottom: '15px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, backgroundColor: 'white', padding: '12px 20px', borderRadius: '999px', display: 'flex', alignItems: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', cursor: 'pointer', fontWeight: '800', whiteSpace: 'nowrap' };
-const centerMapBtnStyle = { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FAF9F6', color: '#2F5D3A', border: '1px solid #E5E0D8', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' };
+const legendButtonStyle = { position: 'absolute', bottom: '15px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, backgroundColor: 'white', padding: '12px 20px', borderRadius: '999px', display: 'flex', alignItems: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', cursor: 'pointer', fontWeight: '800' };
+const centerMapBtnStyle = { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FAF9F6', color: '#2F5D3A', border: '1px solid #E5E0D8', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' };
 const searchInputStyle = { width: '100%', padding: '14px 14px 14px 38px', borderRadius: '16px', border: '2px solid #ECE7DF', outline: 'none', backgroundColor: '#FAF9F6', boxSizing: 'border-box' };
 const searchResultsDropdownStyle = { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: '#FFF', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', border: '1px solid #ECE7DF', marginTop: '8px', zIndex: 4000, maxHeight: '250px', overflowY: 'auto' };
 const searchResultItemStyle = { padding: '12px 16px', borderBottom: '1px solid #F0F0F0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px' };
-const addBtnStyle = { backgroundColor: '#2F5D3A', border: 'none', borderRadius: '16px', width: '52px', height: '52px', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const addBtnStyle = { backgroundColor: '#2F5D3A', border: 'none', borderRadius: '16px', width: '52px', height: '52px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const countInfoStyle = { fontSize: '11px', fontWeight: '800', color: '#98A4A5', textAlign: 'right', textTransform: 'uppercase', marginBottom: '5px' };
-const proposalCardStyle = { backgroundColor: '#FAF9F6', padding: '20px', borderRadius: '24px', border: '1px solid #EEE7DB' };
-const voteBtnStyle = { display: 'flex', alignItems: 'center', border: 'none', padding: '6px 12px', borderRadius: '12px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' };
-const goButtonStyle = { width: '100%', padding: '12px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '14px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer', boxShadow: '0 4px 10px rgba(47,93,58,0.2)' };
+const proposalCardStyle = { padding: '20px', borderRadius: '24px' };
+const voteBtnStyle = { display: 'flex', alignItems: 'center', border: 'none', padding: '6px 12px', borderRadius: '12px', fontSize: '13px', fontWeight: 'bold' };
+const goButtonStyle = { width: '100%', padding: '12px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '14px', fontWeight: 'bold' };
 const deleteBtnStyle = { background: 'none', border: 'none', color: '#98A4A5', cursor: 'pointer', marginLeft: '8px' };
 const modalOverlayStyle = { position: 'fixed', inset: 0, zIndex: 3000, backgroundColor: 'rgba(24, 29, 26, 0.42)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' };
 const modalSheetStyle = { width: '100%', maxWidth: '520px', backgroundColor: '#FAF9F6', borderTopLeftRadius: '32px', borderTopRightRadius: '32px', padding: '24px', boxSizing: 'border-box' };
 const modalHandleStyle = { width: '40px', height: '4px', backgroundColor: '#ddd', borderRadius: '2px', margin: '0 auto 16px auto' };
 const modalTitleStyle = { margin: '0', fontSize: '20px', fontWeight: '800' };
 const findGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '24px' };
-const findOptionBtnStyle = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', border: 'none', background: 'none', cursor: 'pointer' };
+const findOptionBtnStyle = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', border: 'none', background: 'none' };
 const findIconWrapper = { width: '56px', height: '56px', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const primaryModalBtnStyle = { flex: 2, padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '16px', fontWeight: 'bold' };
-const secondaryModalBtnStyle = { flex: 1, border: '1px solid #DDD6CA', backgroundColor: '#ECE9E1', borderRadius: '16px', padding: '14px 10px', fontSize: '13px', fontWeight: 'bold', color: '#667276' };
-const saveBtnStyle = { width: '100%', padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '16px', fontWeight: 'bold' };
-const navOptionBtnStyle = { width: '100%', padding: '16px', backgroundColor: 'white', border: '1px solid #EEE7DB', borderRadius: '16px', textAlign: 'left', fontWeight: '700', marginBottom: '8px', display: 'flex', alignItems: 'center', fontSize: '15px', color: '#243137', cursor: 'pointer' };
-const cancelBtnStyle = { width: '100%', padding: '12px', border: 'none', background: 'none', color: '#999', fontWeight: 'bold', cursor: 'pointer' };
+const secondaryModalBtnStyle = { flex: 1, border: '1px solid #DDD6CA', backgroundColor: '#ECE9E1', borderRadius: '16px', padding: '14px 10px', fontSize: '13px', fontWeight: 'bold' };
+const navOptionBtnStyle = { width: '100%', padding: '16px', backgroundColor: 'white', border: '1px solid #EEE7DB', borderRadius: '16px', textAlign: 'left', fontWeight: '700', marginBottom: '8px', display: 'flex', alignItems: 'center' };
+const cancelBtnStyle = { width: '100%', padding: '12px', border: 'none', background: 'none', color: '#999', fontWeight: 'bold' };
 
 export default ConvoyView;
