@@ -116,7 +116,7 @@ function getPoiServiceFlags(poi, normalizedCategory) {
   };
 }
 
-const ALL_FILTERS_TRUE = { parking: true, graywater: true, blackwater: true, freshwater: true, electricity: true, hidden_gems: true };
+const ALL_FILTERS_OFF = { parking: false, graywater: false, blackwater: false, freshwater: false, electricity: false, hidden_gems: false };
 const ALL_SERVICES_FALSE = Object.keys(SERVICE_META_ALL).reduce((acc, key) => ({ ...acc, [key]: false }), {});
 
 // --- KOMPONENT START ---
@@ -163,7 +163,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   const [newPoi, setNewPoi] = useState({ name: '', services: { ...ALL_SERVICES_FALSE }, lat: null, lng: null });
   const [isSaving, setIsSaving] = useState(false);
 
-  const [activeFilters, setActiveFilters] = useState({ ...ALL_FILTERS_TRUE });
+  const [activeFilters, setActiveFilters] = useState({ ...ALL_FILTERS_OFF });
 
   const [userLocation, setUserLocation] = useState(null);
   const [mapCenter, setMapCenter] = useState([59.61, 16.54]); 
@@ -256,7 +256,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
       const { data: logData } = await supabase.from('logbook').select('*').order('created_at', { ascending: false }).limit(1);
       if (logData?.length > 0) setLatestEntry(logData[0]);
       
-      const { data: poiData } = await supabase.from('pois').select('*').limit(500);
+      const { data: poiData } = await supabase.from('pois').select('*').limit(10000);
       setPois(Array.isArray(poiData) ? poiData : []);
       
       const { data: officialData } = await supabase.from('v_official_pois').select('*');

@@ -151,7 +151,7 @@ function ConvoyView({ currentUser }) {
 
   const [userLocation, setUserLocation] = useState(null);
   const [mapCenter, setMapCenter] = useState([59.61, 16.54]);
-  const [mapZoom, setMapZoom] = useState(13);
+  const [mapZoom, setMapZoom] = useState(10);
   
   const [tempMarker, setTempMarker] = useState(null);
   const [modalDraft, setModalDraft] = useState({ name: '', lat: null, lng: null });
@@ -191,6 +191,7 @@ function ConvoyView({ currentUser }) {
           const coords = [position.coords.latitude, position.coords.longitude];
           setUserLocation(coords);
           setMapCenter(coords);
+          setMapZoom(10);
           setFlyTrigger(prev => prev + 1);
         }
       );
@@ -230,7 +231,7 @@ function ConvoyView({ currentUser }) {
       const lat = parseFloat(proposal.latitude);
       const lng = parseFloat(proposal.longitude);
       setMapCenter([lat, lng]);
-      setMapZoom(14);
+      setMapZoom(10);
       setFlyTrigger(prev => prev + 1);
       setFocusMarker({
         coords: [lat, lng],
@@ -465,9 +466,16 @@ function ConvoyView({ currentUser }) {
 
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', marginTop: '-10px' }}>
           <button 
-            onClick={() => { if(userLocation) { setMapCenter([...userLocation]); setMapZoom(10); setFlyTrigger(prev => prev + 1); } }} 
-            style={centerMapBtnStyle}
-          >
+  onClick={() => { 
+    if(userLocation) { 
+      setMapCenter([...userLocation]); 
+      setMapZoom(10); 
+      setFlyTrigger(prev => prev + 1); 
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } 
+  }} 
+  style={centerMapBtnStyle}
+>
             <Navigation size={14} /> Centrera karta
           </button>
       </div>
