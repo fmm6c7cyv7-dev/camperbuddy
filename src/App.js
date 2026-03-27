@@ -17,7 +17,6 @@ import {
   Loader2,
   LocateFixed,
   Star, 
-  LogOut, 
 } from 'lucide-react';
 
 import DashboardView from './features/dashboard/DashboardView';
@@ -53,22 +52,34 @@ function GlobalHeader({ activeTab, currentUser, onLogout }) {
         <div style={headerRightStyle}>
           {/* TEST-KNAPP: Visas bara om vi är inloggade för att kunna hoppa tillbaka till onboarding */}
           {currentUser && (
-            <button 
-              onClick={onLogout}
-              style={{ 
-                background: 'none', 
-                border: 'none', 
-                marginRight: '10px', 
-                color: '#95A5A6',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center'
-              }}
-              title="Logga ut (Endast för test)"
-            >
-              <LogOut size={18} />
-            </button>
-          )}
+  <div 
+    onClick={onLogout}
+    style={{ 
+      width: '34px',
+      height: '34px',
+      borderRadius: '50%',
+      backgroundColor: '#E8F5E9',
+      border: '2px solid #2F5D3A',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: '10px',
+      cursor: 'pointer',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+      transition: 'transform 0.1s ease',
+      flexShrink: 0
+    }}
+  >
+    <span style={{ 
+      color: '#2F5D3A', 
+      fontWeight: '900', 
+      fontSize: '15px',
+      textTransform: 'uppercase'
+    }}>
+      {currentUser.name ? currentUser.name.charAt(0) : 'B'}
+    </span>
+  </div>
+)}
           
           <div style={headerPillStyle}>
             <MapPin size={15} color="#2F5D3A" />
@@ -740,10 +751,21 @@ function App() {
 const appShellStyle = { backgroundColor: '#F5F2ED', minHeight: '100vh' };
 const onboardingOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(245, 242, 237, 0.98)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' };
 const onboardingCardStyle = { backgroundColor: '#FAF9F6', borderRadius: '34px', width: '100%', maxWidth: '450px', boxShadow: '0 24px 60px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column' };
-const headerLogoImageStyle = { height: '64px', width: 'auto', display: 'block', objectFit: 'contain' };
+const headerLogoImageStyle = { height: '42px', width: 'auto', display: 'block', objectFit: 'contain' };
 const mainContentStyle = { paddingTop: '90px', paddingBottom: '96px' };
 const headerShellStyle = { position: 'fixed', top: 0, left: 0, right: 0, zIndex: 4000, backgroundColor: 'rgba(248,247,243,0.95)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', boxShadow: '0 1px 0 rgba(47,93,58,0.04)' };
-const headerInnerStyle = { width: '100%', maxWidth: '1180px', margin: '0 auto', minHeight: '74px', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px', boxSizing: 'border-box' };
+const headerInnerStyle = { 
+  width: '100%', 
+  maxWidth: '1180px', 
+  margin: '0 auto', 
+  minHeight: '60px', // Sänkt från 74px
+  padding: '8px 12px', // Tajtare padding (från 12px 18px)
+  display: 'flex', 
+  alignItems: 'center', 
+  justifyContent: 'space-between', 
+  gap: '8px', // Mindre gap (från 14px)
+  boxSizing: 'border-box' 
+};
 const headerRightStyle = { display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 };
 const headerPillStyle = { display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderRadius: '999px', background: '#ECE9E1', color: '#2F5D3A', fontSize: '13px', fontWeight: 700, border: '1px solid rgba(47,93,58,0.06)' };
 const simulateStopBtnStyle = { position: 'fixed', left: '50%', bottom: '116px', transform: 'translateX(-50%)', backgroundColor: 'rgba(47, 93, 58, 0.12)', color: 'rgba(47, 93, 58, 0.82)', border: '1px solid rgba(47, 93, 58, 0.18)', padding: '10px 18px', borderRadius: '999px', fontSize: '12px', fontWeight: 700, letterSpacing: '0.01em', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', boxShadow: '0 8px 20px rgba(0,0,0,0.05)', zIndex: 1700, cursor: 'pointer' };

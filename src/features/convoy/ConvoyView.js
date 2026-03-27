@@ -461,7 +461,7 @@ function ConvoyView({ currentUser }) {
             </Marker>
           )}
         </MapContainer>
-        <div style={legendButtonStyle} onClick={openFindModal}><Search size={16} style={{marginRight:'8px', flexShrink: 0}}/><span>Hitta platser & POIs</span></div>
+        <div style={legendButtonStyle} onClick={openFindModal}><Search size={16} style={{marginRight:'8px', flexShrink: 0}}/><span>Hitta POIs</span></div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', marginTop: '-10px' }}>
