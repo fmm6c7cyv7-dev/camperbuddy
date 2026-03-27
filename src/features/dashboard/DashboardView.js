@@ -173,7 +173,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   const [weather, setWeather] = useState({ temp: '--', sunrise: '--:--', sunset: '--:--', icon: <Sun size={18} color="#D8A826" /> });
 
   const [showShareModal, setShowShareModal] = useState(false);
-  const inviteLink = "https://camperbuddy.vercel.app/"; 
+  const inviteLink = "https://camper-buddy.vercel.app/";
 
   const shareViaOs = async () => {
     if (navigator.share) {
