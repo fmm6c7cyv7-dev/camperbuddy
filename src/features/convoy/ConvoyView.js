@@ -162,7 +162,10 @@ function ConvoyView({ currentUser }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showReplaceModal, setShowReplaceModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // SÖK-STATE
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
 
@@ -225,19 +228,32 @@ function ConvoyView({ currentUser }) {
     return () => clearInterval(interval);
   }, []);
 
+  // --- BLIXTSNABB SÖKLOGIK MED RADIE ---
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
+      setDebouncedSearch(searchQuery);
+
       if (searchQuery.trim().length > 2) {
         setIsSearching(true);
         try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5&countrycodes=se,no,dk,fi,is`);
+          const [lat, lon] = mapCenter;
+          const viewbox = `${lon - 3},${lat + 3},${lon + 3},${lat - 3}`;
+          
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=8&countrycodes=se,no,dk,fi,is&viewbox=${viewbox}&bounded=0`);
           const data = await res.json();
           setSearchResults(data);
-        } catch (e) { console.error(e); } finally { setIsSearching(false); }
-      } else { setSearchResults([]); }
-    }, 800);
+        } catch (e) { 
+          console.error(e); 
+        } finally { 
+          setIsSearching(false); 
+        }
+      } else { 
+        setSearchResults([]); 
+      }
+    }, 400); 
+
     return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery]);
+  }, [searchQuery, mapCenter]);
 
   const fetchPois = async () => {
     const { data: poiData } = await supabase.from('pois').select('*').limit(10000);
@@ -259,19 +275,19 @@ function ConvoyView({ currentUser }) {
 
   const filteredPois = useMemo(() => {
     const activeKeys = Object.entries(activeFilters).filter(([k, v]) => v && k !== 'hidden_gems').map(([k]) => k);
-    if (activeKeys.length === 0 && !searchQuery.trim()) return [];
+    if (activeKeys.length === 0 && !debouncedSearch.trim()) return [];
     return validPois.filter((poi) => {
-      const matchesSearch = !searchQuery || poi.name?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = !debouncedSearch || poi.name?.toLowerCase().includes(debouncedSearch.toLowerCase());
       const matchesFilter = activeKeys.length === 0 || activeKeys.some(key => poi.serviceFlags[key]);
       return matchesSearch && matchesFilter;
     });
-  }, [validPois, activeFilters, searchQuery]);
+  }, [validPois, activeFilters, debouncedSearch]);
 
   const currentHitsCount = useMemo(() => {
     const regularHits = filteredPois.length;
-    const gemsHits = activeFilters.hidden_gems ? communityPois.officials.filter(p => !searchQuery || p.name?.toLowerCase().includes(searchQuery.toLowerCase())).length : 0;
+    const gemsHits = activeFilters.hidden_gems ? communityPois.officials.filter(p => !debouncedSearch || p.name?.toLowerCase().includes(debouncedSearch.toLowerCase())).length : 0;
     return regularHits + gemsHits;
-  }, [filteredPois, activeFilters.hidden_gems, communityPois.officials, searchQuery]);
+  }, [filteredPois, activeFilters.hidden_gems, communityPois.officials, debouncedSearch]);
 
   const handleVote = async (id, isUpvote) => {
     const proposal = proposals.find((p) => p.id === id);
@@ -311,17 +327,36 @@ function ConvoyView({ currentUser }) {
     const lat = parseFloat(result.lat);
     const lon = parseFloat(result.lon);
     const cleanName = result.name || result.display_name.split(',')[0];
+    
     setMapCenter([lat, lon]);
     setMapZoom(14);
     setFlyTrigger(prev => prev + 1);
     setTempMarker({ lat, lng: lon });
     setModalDraft({ name: cleanName, lat, lng: lon });
-    setSearchQuery(cleanName); 
+    
+    setSearchQuery(''); 
+    setDebouncedSearch('');
     setSearchResults([]); 
     setFocusMarker(null); 
+    
+    if (document.activeElement) {
+      document.activeElement.blur();
+    }
   };
 
-  const triggerAddFlow = (draft) => { setModalDraft(draft); if (isConvoyFull) setShowReplaceModal(true); else setShowCreateModal(true); };
+  const triggerAddFlow = (draft) => { 
+    if (!draft || !draft.name || draft.name.trim() === '') {
+      alert("Du måste ange eller välja en plats att dela först!");
+      return;
+    }
+
+    setModalDraft(draft); 
+    if (isConvoyFull) setShowReplaceModal(true); 
+    else setShowCreateModal(true); 
+
+    const popupCloseBtn = document.querySelector('.leaflet-popup-close-button');
+    if (popupCloseBtn) popupCloseBtn.click();
+  };
   
   const handleCreateNew = async () => {
     if (isSaving || !modalDraft.name || !activeConvoyId) {
@@ -343,11 +378,10 @@ function ConvoyView({ currentUser }) {
 
   const handleReplace = async (id) => { await supabase.from('proposals').delete().eq('id', id); handleCreateNew(); setShowReplaceModal(false); };
 
-  // --- NY FUNKTION: LÄMNA KONVOJ ---
   const handleLeaveConvoy = async () => {
     if (window.confirm("Är du säker på att du vill lämna denna resa?")) {
       await supabase.from('buddies').update({ current_convoy_id: null }).eq('id', currentUser.id);
-      fetchProposalsAndMembers(); // Uppdaterar vyn så "Ingen aktiv resa" visas direkt
+      fetchProposalsAndMembers(); 
     }
   };
 
@@ -386,16 +420,24 @@ function ConvoyView({ currentUser }) {
   return (
     <div style={{ padding: '10px 20px 100px 20px', boxSizing: 'border-box' }}>
       
-      {/* --- LIVE MEDLEMS-RAD MED LÄMNA-KNAPP --- */}
       {convoyMembers.length > 0 && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
           <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '5px', scrollbarWidth: 'none', flex: 1 }}>
             {convoyMembers.map(m => {
               const speed = m.last_speed || 0;
               const isMoving = speed > 5;
-              const statusText = isMoving ? `${Math.round(speed)} km/h` : 'Står stilla';
-              const statusColor = isMoving ? '#4D93C7' : '#7CB342';
+              let statusText = isMoving ? `${Math.round(speed)} km/h` : 'Står stilla';
+              let statusColor = isMoving ? '#4D93C7' : '#7CB342';
               const isMe = m.id === currentUser?.id;
+
+              // OFFLINE LOGIK: Om uppdateringen är äldre än 5 minuter
+              if (m.last_updated) {
+                const diffMins = Math.floor((new Date() - new Date(m.last_updated)) / 60000);
+                if (diffMins > 5) {
+                  statusText = diffMins > 60 ? '> 1h sen' : `${diffMins} min sen`;
+                  statusColor = '#E67E22'; // Orange varning för gammal data
+                }
+              }
 
               return (
                 <div 
@@ -461,7 +503,37 @@ function ConvoyView({ currentUser }) {
 
           {focusMarker && <Marker position={focusMarker.coords} icon={redIcon}><Popup autoOpen><div style={{ textAlign: 'center' }}><h3>{focusMarker.name}</h3><p>Tips från {focusMarker.createdBy}</p></div></Popup></Marker>}
           {proposals.map(p => (p.latitude && p.longitude && <Marker key={p.id} position={[p.latitude, p.longitude]} icon={redIcon}><Popup><div style={{ textAlign: 'center' }}><h3>{p.name}</h3><button onClick={() => openNavModal(p)} style={goButtonStyle}>Åk hit 🚐</button></div></Popup></Marker>))}
-          {filteredPois.map(poi => (<Marker key={poi.id} position={[poi.lat, poi.lng]} icon={getMarkerIconForPoi(poi)}><Popup><div style={{ textAlign: 'center' }}><h3>{poi.name}</h3><button onClick={() => openNavModal(poi)} style={goButtonStyle}>Åk hit 🚐</button><button onClick={() => triggerAddFlow(poi)} style={{ ...goButtonStyle, backgroundColor: 'transparent', color: '#2F5D3A', marginTop: '8px', border: '1px solid #2F5D3A' }}>➕ Föreslå</button></div></Popup></Marker>))}
+          
+          {/* UPPGRADERAD POI-POPUP MED FACILITETER */}
+          {filteredPois.map(poi => (
+            <Marker key={poi.id} position={[poi.lat, poi.lng]} icon={getMarkerIconForPoi(poi)}>
+              <Popup>
+                <div style={{ textAlign: 'center', minWidth: '160px' }}>
+                  <h3 style={{ margin: '0 0 4px 0', fontSize: '15px', color: '#2F5D3A' }}>{poi.name}</h3>
+                  {poi.description && (
+                    <p style={{ fontSize: '11px', color: '#667276', margin: '0 0 8px 0', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {poi.description}
+                    </p>
+                  )}
+                  
+                  {/* Ikoner för faciliteter */}
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '4px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                    {poi.serviceFlags.parking && <div style={popupIconBoxStyle} title="Ställplats"><MapPin size={12} color="#2e7d32" /></div>}
+                    {poi.serviceFlags.camp_site && <div style={popupIconBoxStyle} title="Camping"><Tent size={12} color="#7b1fa2" /></div>}
+                    {poi.serviceFlags.freshwater && <div style={popupIconBoxStyle} title="Färskvatten"><Droplet size={12} color="#1976D2" /></div>}
+                    {poi.serviceFlags.electricity && <div style={popupIconBoxStyle} title="El"><Zap size={12} color="#D4A017" /></div>}
+                    {poi.serviceFlags.graywater && <div style={popupIconBoxStyle} title="Gråvatten"><ArrowDown size={12} color="#7E8A8A" /></div>}
+                    {poi.serviceFlags.blackwater && <div style={popupIconBoxStyle} title="Svartvatten"><Trash2 size={12} color="#36424A" /></div>}
+                    {poi.serviceFlags.swimming && <div style={popupIconBoxStyle} title="Badplats"><Waves size={12} color="#0288d1" /></div>}
+                  </div>
+
+                  <button onClick={() => openNavModal(poi)} style={goButtonStyle}>Åk hit 🚐</button>
+                  <button onClick={() => triggerAddFlow(poi)} style={{ ...goButtonStyle, backgroundColor: 'transparent', color: '#2F5D3A', marginTop: '8px', border: '1px solid #2F5D3A' }}>➕ Föreslå</button>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+          
           {activeFilters.hidden_gems && communityPois.officials.map(p => (<Marker key={p.id} position={[p.latitude, p.longitude]} icon={officialStarIcon} />))}
           {tempMarker && <Marker position={tempMarker} icon={redIcon}><Popup autoOpen><div style={{ textAlign: 'center' }}><h3>Nytt resmål?</h3><button onClick={() => triggerAddFlow(modalDraft)} style={goButtonStyle}>➕ Föreslå plats</button></div></Popup></Marker>}
         </MapContainer>
@@ -478,7 +550,19 @@ function ConvoyView({ currentUser }) {
           <input type="text" placeholder="Sök plats..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={searchInputStyle} />
           {searchResults.length > 0 && (
             <div style={searchResultsDropdownStyle}>
-              {searchResults.map((r) => (<div key={r.place_id} onClick={() => handleSelectSearchResult(r)} style={searchResultItemStyle}><MapPin size={16}/><span>{r.name || r.display_name.split(',')[0]}</span></div>))}
+              {searchResults.map((r) => (
+                <div key={r.place_id} onClick={() => handleSelectSearchResult(r)} style={searchResultItemStyle}>
+                  <MapPin size={18} color="#98A4A5" style={{ flexShrink: 0 }}/>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ fontWeight: 'bold', fontSize: '14px', color: '#243137' }}>
+                      {r.name || r.display_name.split(',')[0]}
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#98A4A5' }}>
+                      {r.display_name.split(',').slice(1, 3).join(',').trim()}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -602,11 +686,12 @@ function ConvoyView({ currentUser }) {
 }
 
 // --- STYLES ---
+const popupIconBoxStyle = { backgroundColor: '#F0F4F4', padding: '4px 6px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const mapWrapperStyle = { height: '350px', borderRadius: '28px', overflow: 'hidden', marginBottom: '20px', border: '5px solid #F9F7F2', position: 'relative' };
 const legendButtonStyle = { position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, backgroundColor: 'rgba(255, 255, 255, 0.95)', padding: '8px 16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #EEE7DB', cursor: 'pointer', fontSize: '13px', fontWeight: '700', color: '#47525d' };
 const centerMapBtnStyle = { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FAF9F6', color: '#2F5D3A', border: '1px solid #E5E0D8', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' };
 const searchInputStyle = { width: '100%', padding: '14px 14px 14px 38px', borderRadius: '16px', border: '2px solid #ECE7DF', outline: 'none', backgroundColor: '#FAF9F6', boxSizing: 'border-box' };
-const searchResultsDropdownStyle = { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: '#FFF', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', border: '1px solid #ECE7DF', marginTop: '8px', zIndex: 4000, maxHeight: '250px', overflowY: 'auto' };
+const searchResultsDropdownStyle = { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: '#FFF', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', border: '1px solid #ECE7DF', marginTop: '8px', zIndex: 4000, maxHeight: '300px', overflowY: 'auto' };
 const searchResultItemStyle = { padding: '12px 16px', borderBottom: '1px solid #F0F0F0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px' };
 const addBtnStyle = { backgroundColor: '#2F5D3A', border: 'none', borderRadius: '16px', width: '52px', height: '52px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const countInfoStyle = { fontSize: '11px', fontWeight: '800', color: '#98A4A5', textAlign: 'right', textTransform: 'uppercase', marginBottom: '5px' };
