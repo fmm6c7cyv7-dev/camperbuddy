@@ -395,7 +395,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         {/* --- NY LAYOUT: VÄDER OCH INBJUDAN --- */}
         <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'stretch' }}>
           
-          <div style={{ ...weatherCardStyle, flex: 2, margin: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '14px 10px' }}>
+          <div style={{ ...weatherCardStyle, flex: 3, margin: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '14px 10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
               <MapPin size={16} color="#2F5D3A" />
               <span style={{ fontSize: '14px', fontWeight: '900', color: '#243137', letterSpacing: '0.5px' }}>{locationInfo.name}</span>
@@ -501,12 +501,12 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
           
         <div style={summaryGridStyle}>
           <div style={smallSectionStyle} onClick={() => handleGoToTopProposal(topProposal)}>
-            <div style={sectionHeaderStyle}><Trophy size={14} color="#D8A826" /> LEDER OMRÖSTNINGEN</div>
+            <div style={sectionHeaderStyle}><Trophy size={14} color="#D8A826" /> DINA BUDDIES TIPSAR OM NÄSTA STOPP</div>
             <div style={miniCardStyle}>
               <h4 style={miniTitleStyle}>
                 {topProposal ? (
                   <>
-                    <strong>{topProposal.created_by_name || 'En Buddy'}</strong> föreslår <strong>{topProposal.name}</strong> som nästa stopp
+                    <strong>{topProposal.created_by_name || 'En Buddy'}</strong> föreslår <strong>{topProposal.name}</strong> 
                   </>
                 ) : (
                   'Inga förslag ännu'
@@ -515,7 +515,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             </div>
           </div>
           <div style={smallSectionStyle} onClick={() => setActiveTab('logbook')}>
-            <div style={sectionHeaderStyle}><Clock size={14} color="#4D93C7" /> LOGGBOKEN</div>
+            <div style={sectionHeaderStyle}><Clock size={14} color="#4D93C7" /> MIN SENSTE LOGG</div>
             <div style={miniCardStyle}><h4 style={miniTitleStyle}>{latestEntry?.location || 'Inga minnen'}</h4></div>
           </div>
         </div>
@@ -636,7 +636,23 @@ const loadingStateStyle = { textAlign: 'center', marginTop: '100px', color: '#8B
 const weatherCardStyle = { background: '#F7F4EE', border: '1px solid #E8E1D6', borderRadius: '20px', padding: '12px 16px', marginBottom: '14px' };
 const weatherItemStyle = { display: 'flex', alignItems: 'center', gap: '5px' };
 const mapContainerStyle = { height: '350px', width: '100%', borderRadius: '28px', overflow: 'hidden', marginBottom: '25px', position: 'relative', border: '5px solid #F9F7F2' };
-const legendButtonStyle = { position: 'absolute', bottom: '15px', left: '50%', transform: 'translateX(-50%)', zIndex: 2000, backgroundColor: 'rgba(255, 255, 255, 0.96)', padding: '8px 16px', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.12)', cursor: 'pointer' };
+const legendButtonStyle = { 
+  position: 'absolute', 
+  top: '12px', // Flyttad från bottom: 15px
+  left: '50%', 
+  transform: 'translateX(-50%)', 
+  zIndex: 2000, 
+  backgroundColor: 'rgba(255, 255, 255, 0.92)', 
+  backdropFilter: 'blur(4px)', // Ger den snygga glaskänslan
+  padding: '8px 16px', 
+  borderRadius: '12px', // Ändrad från 999px till 12px för rektangulär look
+  display: 'flex', 
+  alignItems: 'center', 
+  gap: '10px', 
+  boxShadow: '0 4px 15px rgba(0,0,0,0.08)', 
+  border: '1px solid #EEE7DB',
+  cursor: 'pointer' 
+};
 const dot = { width: '10px', height: '10px', borderRadius: '50%' };
 const centerMapBtnStyle = { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FAF9F6', color: '#2F5D3A', border: '1px solid #E5E0D8', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' };
 const summaryGridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' };

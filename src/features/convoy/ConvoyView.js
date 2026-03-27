@@ -624,7 +624,26 @@ function ConvoyView({ currentUser }) {
 
 // --- STYLES ---
 const mapWrapperStyle = { height: '350px', borderRadius: '28px', overflow: 'hidden', marginBottom: '20px', border: '5px solid #F9F7F2', position: 'relative' };
-const legendButtonStyle = { position: 'absolute', bottom: '15px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, backgroundColor: 'white', padding: '12px 20px', borderRadius: '999px', display: 'flex', alignItems: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', cursor: 'pointer', fontWeight: '800' };
+const legendButtonStyle = { 
+  position: 'absolute', 
+  top: '12px', // Vi flyttar upp den så den inte ligger mitt i Västerås/vattnet
+  left: '50%', 
+  transform: 'translateX(-50%)', 
+  zIndex: 1000, 
+  backgroundColor: 'rgba(255, 255, 255, 0.95)', // Lätt transparens
+  backdropFilter: 'blur(4px)', // Modern glas-effekt
+  padding: '8px 16px', // Mindre padding för slimmad look
+  borderRadius: '12px', // Matchar dina andra inputs/kort
+  display: 'flex', 
+  alignItems: 'center', 
+  gap: '8px', // Mellanrum mellan ikon och text
+  boxShadow: '0 4px 12px rgba(0,0,0,0.1)', 
+  border: '1px solid #EEE7DB',
+  cursor: 'pointer', 
+  fontSize: '13px', // Något mindre text för att kännas mer proffsig
+  fontWeight: '700',
+  color: '#47525d'
+};
 const centerMapBtnStyle = { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FAF9F6', color: '#2F5D3A', border: '1px solid #E5E0D8', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' };
 const searchInputStyle = { width: '100%', padding: '14px 14px 14px 38px', borderRadius: '16px', border: '2px solid #ECE7DF', outline: 'none', backgroundColor: '#FAF9F6', boxSizing: 'border-box' };
 const searchResultsDropdownStyle = { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: '#FFF', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', border: '1px solid #ECE7DF', marginTop: '8px', zIndex: 4000, maxHeight: '250px', overflowY: 'auto' };
