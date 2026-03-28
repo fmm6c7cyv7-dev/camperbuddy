@@ -17,6 +17,8 @@ import {
   Loader2,
   LocateFixed,
   Star, 
+  LogOut, // Tillagd för utloggningsmodalen
+  PlayCircle // TILLAGD: Krävs för simulator-knappen annars kraschar appen
 } from 'lucide-react';
 
 import DashboardView from './features/dashboard/DashboardView';
@@ -25,7 +27,7 @@ import LogbookView from './features/logbook/LogbookView';
 import LogbookComposer from './features/logbook/LogbookComposer'; 
 
 const STOP_THRESHOLD_KMH = 2;
-const STOP_DELAY_MS = 5000;
+const STOP_DELAY_MS = 30000;
 const ASSISTANT_ANIMATION_MS = 1500;
 const DEFAULT_LOCATION_TEXT = 'Hämtar position...';
 
@@ -47,7 +49,6 @@ function GlobalHeader({ currentUser, onLogout }) {
         <CamperBuddyLogo />
 
         <div style={headerRightStyle}>
-          {/* Vår snygga Avatar-knapp som sköter in/utloggning */}
           {currentUser && (
             <div 
               onClick={onLogout}
@@ -108,10 +109,21 @@ function App() {
   const [loginError, setLoginError] = useState('');
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
 
+  // Ny state för utloggningsmodalen
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [simulatorReady, setSimulatorReady] = useState(false);
+  const [simulatedSpeed, setSimulatedSpeed] = useState(null); // Tillåter oss att skriva över GPS:en
+
+  // Smyg upp simulator-knappen efter 0.5s
+  useEffect(() => {
+    const timer = setTimeout(() => setSimulatorReady(true), 500);
+    return () => clearTimeout(timer);
+  }, []);
+
   const watchIdRef = useRef(null);
   const stopTimerRef = useRef(null);
   const assistantHideTimerRef = useRef(null);
-  const lastDbUpdateRef = useRef(0); // <-- NY: Håller koll på live-uppdateringar
+  const lastDbUpdateRef = useRef(0);
 
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -129,7 +141,6 @@ function App() {
 
   const [composerDraft, setComposerDraft] = useState(emptyComposer);
 
-  // --- NY LOGIK FÖR INBJUDNINGSLÄNKAR ---
   const handleJoinConvoy = async (joinCode, userProfile) => {
     try {
       const { data: convoyData, error: findError } = await supabase
@@ -160,7 +171,6 @@ function App() {
     const urlParams = new URLSearchParams(window.location.search);
     const joinCode = urlParams.get('join');
     
-    // Städa upp URL så man slipper se "?join=XXX" permanent
     if (joinCode) {
       window.history.replaceState({}, document.title, window.location.pathname);
       sessionStorage.setItem('pendingJoinCode', joinCode);
@@ -183,12 +193,17 @@ function App() {
   }, []);
 
   const handleLogout = () => {
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogoutAction = () => {
     localStorage.removeItem('camperbuddy_profile');
     setCurrentUser(null);
     setOnboardingName('');
     setOnboardingPin('');
     setLoginError('');
     setShowOnboarding(true);
+    setShowLogoutModal(false);
   };
 
   const saveUserProfile = async () => {
@@ -221,7 +236,6 @@ function App() {
           setCurrentUser(userProfile);
           setShowOnboarding(false);
 
-          // Kolla om en magic link har väntat i bakgrunden
           const pendingCode = sessionStorage.getItem('pendingJoinCode');
           if (pendingCode) {
             handleJoinConvoy(pendingCode, userProfile);
@@ -256,7 +270,6 @@ function App() {
         setCurrentUser(userProfile);
         setShowOnboarding(false);
 
-        // Kolla om en magic link har väntat i bakgrunden
         const pendingCode = sessionStorage.getItem('pendingJoinCode');
         if (pendingCode) {
           handleJoinConvoy(pendingCode, userProfile);
@@ -359,9 +372,9 @@ function App() {
       (pos) => {
         const rawSpeed = pos?.coords?.speed;
         if (rawSpeed == null || !Number.isFinite(rawSpeed)) return;
-        const speedKmh = rawSpeed * 3.6;
+        const realSpeedKmh = rawSpeed * 3.6;
+        const speedKmh = simulatedSpeed !== null ? simulatedSpeed : realSpeedKmh;
 
-        // --- LIVE TRACKING (Skickas max var 15:e sekund) ---
         const now = Date.now();
         if (currentUser && (now - lastDbUpdateRef.current > 15000)) {
           lastDbUpdateRef.current = now;
@@ -373,7 +386,6 @@ function App() {
           }).eq('id', currentUser.id).then();
         }
 
-        // --- ASSISTANT LOGIK ---
         if (speedKmh <= STOP_THRESHOLD_KMH) {
           if (!assistantMounted && !assistantVisible && !dismissedUntilMotion && !stopTimerRef.current && activeTab === 'home') {
             stopTimerRef.current = setTimeout(() => {
@@ -397,7 +409,7 @@ function App() {
       if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
       if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
     };
-  }, [activeTab, assistantMounted, assistantVisible, dismissedUntilMotion, currentUser]);
+  }, [activeTab, assistantMounted, assistantVisible, dismissedUntilMotion, currentUser, simulatedSpeed]);
 
   const openComposer = (draft = {}) => {
     setComposerDraft({
@@ -433,7 +445,8 @@ function App() {
     openComposer({
       title: cleanLocation ? `Stopp vid ${cleanLocation}` : '',
       location: cleanLocation,
-      content: '',
+      // 🚨 HÄR FÖRIFYLLER VI TEXTEN:
+      content: cleanLocation ? `Stannat vid ${cleanLocation}` : 'Ett nytt äventyr...',
       date: new Date().toISOString().slice(0, 10),
       image: null,
       existingImageUrl: '',
@@ -622,10 +635,37 @@ function App() {
 
       <GlobalHeader 
         currentUser={currentUser} 
-        onLogout={handleLogout} 
+        onLogout={(e) => {
+          if (e && e.preventDefault) e.preventDefault();
+          handleLogout();
+        }} 
       />
 
-      <main style={mainContentStyle}>{renderContent()}</main>
+      <main style={mainContentStyle}>
+        {renderContent()}
+        
+        {/* Simulator-knappen */}
+        <div style={{
+          padding: '60px 20px 40px 20px',
+          textAlign: 'center',
+          transition: 'all 0.8s cubic-bezier(0.2, 1, 0.3, 1)',
+          opacity: simulatorReady ? 0.4 : 0,
+          transform: simulatorReady ? 'translateY(0)' : 'translateY(30px)'
+        }}>
+          <p style={{ fontSize: '11px', color: '#95A5A6', fontWeight: '800', marginBottom: '8px' }}>
+            Utvecklingsläge
+          </p>
+          <button 
+            onClick={() => {
+              setSimulatedSpeed(0);
+              openAssistantModal(); // Trumfar 30s-timern och öppnar direkt!
+            }} 
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', backgroundColor: 'white', color: '#2F5D3A', border: '2px solid #2F5D3A', padding: '10px 20px', borderRadius: '14px', fontWeight: '800' }}
+          >
+            <PlayCircle size={18} /> Simulera Stopp (0 km/h)
+          </button>
+        </div>
+      </main>
 
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleCameraChange} style={{ display: 'none' }} />
       <input ref={galleryInputRef} type="file" accept="image/*" onChange={handleGalleryChange} style={{ display: 'none' }} />
@@ -640,9 +680,37 @@ function App() {
               <div style={iconBox}><Trees size={22} color="#8B9798" /><span>Natur</span></div>
               <div style={iconBox}><Sun size={22} color="#8B9798" /><span>Solnedgång</span></div>
             </div>
-            <div style={{ display: 'flex', gap: '14px' }}>
-              <button style={primaryBtn} onClick={handleAssistantToComposer}>Ja, spara 📸</button>
-              <button style={secondaryBtn} onClick={() => closeAssistantModal({ dismissUntilMove: true })}>Nej tack</button>
+            <div style={{ display: 'flex', gap: '14px', width: '100%' }}>
+              <button style={{ ...primaryBtn, flex: 1, width: 'auto' }} onClick={handleAssistantToComposer}>
+                Ja, spara 📸
+              </button>
+              <button style={{ ...secondaryBtn, flex: 1, borderRadius: '16px', fontSize: '18px', fontWeight: 700, padding: '16px' }} onClick={() => closeAssistantModal({ dismissUntilMove: true })}>
+                Nej tack
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚨 SNYGG MODAL FÖR UTLOGGNINGSBEKRÄFTELSE 🚨 */}
+      {showLogoutModal && (
+        <div style={modalOverlayStyle} onClick={() => setShowLogoutModal(false)}>
+          <div style={{ ...modalStyle, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHandleStyle} />
+            
+            <div style={{ width: '64px', height: '64px', backgroundColor: '#F9EBEB', color: '#D32F2F', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto' }}>
+              <LogOut size={32} />
+            </div>
+
+            <h3 style={sheetTitleStyle}>Logga ut?</h3>
+            
+            <p style={{ ...actionSheetTextStyle, marginTop: '12px' }}>
+              Vill du verkligen logga ut <b>{currentUser?.name || 'Buddy'}</b> från CamperBUDDY?
+            </p>
+            
+            <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
+              <button onClick={() => setShowLogoutModal(false)} style={secondaryModalBtnStyle}>Avbryt</button>
+              <button onClick={confirmLogoutAction} style={{ ...primaryModalBtnStyle, backgroundColor: '#D32F2F' }}>Logga ut</button>
             </div>
           </div>
         </div>
@@ -765,5 +833,10 @@ const assistantTitleStyle = { margin: 0, color: '#2F5D3A', fontSize: '28px', fon
 const assistantLeadStyle = { margin: '28px 0 24px 0', color: '#657174', fontSize: '22px', lineHeight: 1.35 };
 const infoRowStyle = { display: 'flex', justifyContent: 'space-around', margin: '0 0 26px 0', padding: '24px 0', borderTop: '1px solid #E3E1DB', borderBottom: '1px solid #E3E1DB' };
 const iconBox = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: '#8B9798', fontSize: '16px', fontWeight: 500 };
+
+// NYA STILAR FÖR MODALEN
+const modalHandleStyle = { width: '40px', height: '4px', backgroundColor: '#ddd', borderRadius: '2px', margin: '0 auto 16px auto' };
+const primaryModalBtnStyle = { flex: 2, padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '16px', fontWeight: 'bold', cursor: 'pointer' };
+const secondaryModalBtnStyle = { flex: 1, border: '1px solid #DDD6CA', backgroundColor: '#ECE9E1', borderRadius: '16px', padding: '14px 10px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' };
 
 export default App;

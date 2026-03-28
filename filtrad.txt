@@ -1,0 +1,44 @@
+/workspaces/camperbuddy
+├── Downloads
+|  └── husbilsplatser_260327.csv
+├── README.md
+├── importCsv.js
+├── package-lock.json
+├── package.json
+├── public
+|  ├── icons
+|  |  ├── apple-touch-icon.png
+|  |  ├── favicon-16.png
+|  |  ├── favicon-32.png
+|  |  ├── header_logo_11.png
+|  |  ├── icon-192.png
+|  |  └── icon-512.png
+|  ├── index.html
+|  └── manifest.json
+├── seedPois.js
+└── src
+   ├── App.js
+   ├── assets
+   |  ├── images
+   |  |  ├── header_logo_11.png
+   |  |  └── icon-512.png
+   |  └── styles
+   |     └── global.css
+   ├── components
+   |  └── commons
+   |     └── AppHeader.js
+   ├── features
+   |  ├── convoy
+   |  |  └── ConvoyView.js
+   |  ├── dashboard
+   |  |  └── DashboardView.js
+   |  └── logbook
+   |     ├── LogbookComposer.js
+   |     └── LogbookView.js
+   ├── index.js
+   └── services
+      └── supabaseClient.js
+
+directory: 3107 file: 16397
+
+ignored: directory (331)
