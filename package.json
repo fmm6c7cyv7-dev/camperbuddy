@@ -1,6 +1,6 @@
 {
   "name": "camper-buddy",
-  "version": "7.1.1",
+  "version": "7.1.2",
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.100.0",

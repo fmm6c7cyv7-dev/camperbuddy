@@ -18,8 +18,18 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-function MapEvents({ onMapClick }) {
-  useMapEvents({ click(e) { onMapClick(e.latlng); } });
+function MapEvents({ onMapClick, onBoundsChange }) {
+  const map = useMapEvents({
+    click(e) { onMapClick(e.latlng); },
+    moveend() { onBoundsChange(map.getBounds()); },
+    zoomend() { onBoundsChange(map.getBounds()); }
+  });
+
+  useEffect(() => {
+    // Sätt initiala bounds när kartan laddas
+    onBoundsChange(map.getBounds());
+  }, [map, onBoundsChange]);
+
   return null;
 }
 
@@ -209,6 +219,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
   const [topProposal, setTopProposal] = useState(null);
   const [latestEntry, setLatestEntry] = useState(null);
   const [pois, setPois] = useState([]);
+  const [mapBounds, setMapBounds] = useState(null);
   const [communityPois, setCommunityPois] = useState({ drafts: [], officials: [] });
   const [loading, setLoading] = useState(true);
   const [flyTrigger, setFlyTrigger] = useState(0);
@@ -419,6 +430,13 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     return validPois.filter((poi) => activeKeys.some((key) => poi.serviceFlags[key]));
   }, [validPois, activeFilters]);
 
+  const visiblePois = useMemo(() => {
+    if (!mapBounds || filteredPois.length === 0) return [];
+    // Lägg till 20% marginal så att kartan inte laddar för tätt inpå kanterna när man drar
+    const paddedBounds = mapBounds.pad(0.2); 
+    return filteredPois.filter(poi => paddedBounds.contains([poi.lat, poi.lng]));
+  }, [filteredPois, mapBounds]);
+
   const openNavModal = (poi) => {
     setSelectedNavPoi(poi);
     setNavModalRendered(true);
@@ -550,7 +568,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
           <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%', borderRadius: '22px' }} zoomControl={false}>
             <ChangeView center={mapCenter} zoom={mapZoom} trigger={flyTrigger} />
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='© OpenStreetMap' />
-            <MapEvents onMapClick={handleMapClick} />
+            <MapEvents onMapClick={handleMapClick} onBoundsChange={setMapBounds} />
             
             {userLocation && (
               <Marker position={userLocation} icon={blueDotIcon} zIndexOffset={1000}>
@@ -558,7 +576,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
               </Marker>
             )}
 
-            {filteredPois.map((poi) => (
+            {visiblePois.map((poi) => (
               <Marker key={poi.id} position={[poi.lat, poi.lng]} icon={getMarkerIconForPoi(poi)}>
                 <Popup>
                   <div style={{ minWidth: '180px' }}>
@@ -584,6 +602,12 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
 
             {activeFilters.hidden_gems && communityPois.officials.map((poi) => {
               if (!poi.latitude || !poi.longitude) return null;
+              
+              // 🚨 NYTT: Kontrollera om pärlan är inom den synliga kartan
+              if (mapBounds && !mapBounds.pad(0.2).contains([poi.latitude, poi.longitude])) {
+                return null; 
+              }
+
               return (
                 <Marker key={poi.id} position={[poi.latitude, poi.longitude]} icon={officialStarIcon}>
                   <Popup>
