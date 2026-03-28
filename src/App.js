@@ -455,9 +455,15 @@ function App() {
     setActiveTab('logbook');
   };
 
+  // -------------------------------------------------------------
+  // HÄR ÄR DEN ENDA ÄNDRINGEN I FILEN
+  // Istället för att öppna galleri/kamera-menyn, triggar vi kameran direkt.
+  // -------------------------------------------------------------
   const openDashboardPhotoFlow = () => {
     setPickerTarget('newComposerFromDashboard');
-    setShowMediaPicker(true);
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click();
+    }
   };
 
   const openComposerFromLogbook = () => {
@@ -828,7 +834,8 @@ const actionSheetStyle = { width: '100%', maxWidth: '430px', backgroundColor: '#
 const sheetHandleStyle = { width: '48px', height: '5px', borderRadius: '999px', backgroundColor: '#D9DDD6', margin: '0 auto 16px auto' };
 const actionSheetHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' };
 const actionSheetTextStyle = { margin: '0 0 16px 0', color: '#667276', fontSize: '14px', lineHeight: '1.5' };
-const sheetActionBtnStyle = { width: '100%', border: '1px solid #DDD7CC', backgroundColor: '#ECE9E1', color: '#2F5D3A', borderRadius: '16px', padding: '16px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer', marginBottom: '10px' };
+const sheetActionGridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' };
+const sheetActionBtnStyle = { border: '1px solid #DDD7CC', backgroundColor: '#ECE9E1', color: '#2F5D3A', borderRadius: '16px', padding: '16px', fontWeight: 'bold', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer' };
 const sheetCancelBtnStyle = { width: '100%', border: 'none', backgroundColor: '#1C2730', color: '#FFF', borderRadius: '16px', padding: '15px', fontWeight: 'bold', cursor: 'pointer' };
 const assistantOverlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 22, 19, 0.68)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', zIndex: 5000, padding: '20px 20px calc(96px + env(safe-area-inset-bottom)) 20px', transition: `opacity ${ASSISTANT_ANIMATION_MS}ms ease-in-out` };
 const bottomSheetStyle = { backgroundColor: '#FAF9F6', padding: '34px 32px 28px 32px', borderRadius: '34px', width: '100%', maxWidth: '850px', boxShadow: '0 24px 60px rgba(0,0,0,0.18)', transition: `transform ${ASSISTANT_ANIMATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${ASSISTANT_ANIMATION_MS}ms ease-in-out` };
@@ -836,8 +843,6 @@ const assistantTitleStyle = { margin: 0, color: '#2F5D3A', fontSize: '28px', fon
 const assistantLeadStyle = { margin: '28px 0 24px 0', color: '#657174', fontSize: '22px', lineHeight: 1.35 };
 const infoRowStyle = { display: 'flex', justifyContent: 'space-around', margin: '0 0 26px 0', padding: '24px 0', borderTop: '1px solid #E3E1DB', borderBottom: '1px solid #E3E1DB' };
 const iconBox = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', color: '#8B9798', fontSize: '16px', fontWeight: 500 };
-
-// NYA STILAR FÖR MODALEN
 const modalHandleStyle = { width: '40px', height: '4px', backgroundColor: '#ddd', borderRadius: '2px', margin: '0 auto 16px auto' };
 const primaryModalBtnStyle = { flex: 2, padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '16px', fontWeight: 'bold', cursor: 'pointer' };
 const secondaryModalBtnStyle = { flex: 1, border: '1px solid #DDD6CA', backgroundColor: '#ECE9E1', borderRadius: '16px', padding: '14px 10px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' };
