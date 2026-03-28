@@ -160,7 +160,7 @@ function ConvoyView({ currentUser }) {
   const [isConvoyFull, setIsConvoyFull] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showReplaceModal, setShowReplaceModal] = useState(false);
-  const [showLeaveModal, setShowLeaveModal] = useState(false); // Ny State för lämna-modal
+  const [showLeaveModal, setShowLeaveModal] = useState(false); 
   const [isSaving, setIsSaving] = useState(false);
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -338,7 +338,6 @@ function ConvoyView({ currentUser }) {
 
   const handleReplace = async (id) => { await supabase.from('proposals').delete().eq('id', id); handleCreateNew(); setShowReplaceModal(false); };
 
-  // NY SNYGG FUNKTION FÖR ATT LÄMNA KONVOJEN
   const confirmLeaveConvoy = async () => {
     try {
       const { error } = await supabase.from('buddies').update({ current_convoy_id: null }).eq('id', currentUser.id);
@@ -435,27 +434,52 @@ function ConvoyView({ currentUser }) {
               </Marker>
             );
           })}
-          {focusMarker && <Marker position={focusMarker.coords} icon={redIcon}><Popup autoOpen><div style={{ textAlign: 'center' }}><h3>{focusMarker.name}</h3><p>Tips från {focusMarker.createdBy}</p></div></Popup></Marker>}
-          {proposals.map(p => (p.latitude && p.longitude && <Marker key={p.id} position={[p.latitude, p.longitude]} icon={redIcon}><Popup><div style={{ textAlign: 'center' }}><h3>{p.name}</h3><button onClick={() => openNavModal(p)} style={goButtonStyle}>Åk hit 🚐</button></div></Popup></Marker>))}
-          {filteredPois.map(poi => (
-            <Marker key={poi.id} position={[poi.lat, poi.lng]} icon={getMarkerIconForPoi(poi)}>
-              <Popup>
-                <div style={{ textAlign: 'center', minWidth: '160px' }}>
-                  <h3 style={{ margin: '0 0 4px 0', fontSize: '15px', color: '#2F5D3A' }}>{poi.name}</h3>
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '4px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                    {poi.serviceFlags.parking && <div style={popupIconBoxStyle} title="Ställplats"><MapPin size={12} color="#2e7d32" /></div>}
-                    {poi.serviceFlags.camp_site && <div style={popupIconBoxStyle} title="Camping"><Tent size={12} color="#7b1fa2" /></div>}
-                    {poi.serviceFlags.freshwater && <div style={popupIconBoxStyle} title="Färskvatten"><Droplet size={12} color="#1976D2" /></div>}
-                    {poi.serviceFlags.electricity && <div style={popupIconBoxStyle} title="El"><Zap size={12} color="#D4A017" /></div>}
+          {focusMarker && <Marker position={focusMarker.coords} icon={redIcon}><Popup autoOpen><div style={{ textAlign: 'center', padding: '5px' }}><strong style={{fontSize: '14px'}}>{focusMarker.name}</strong><p style={{fontSize: '11px', color: '#666'}}>Tips från {focusMarker.createdBy}</p></div></Popup></Marker>}
+          
+          {proposals.map(p => (p.latitude && p.longitude && 
+            <Marker key={p.id} position={[p.latitude, p.longitude]} icon={redIcon}>
+              <Popup autoPan={true} offset={[0, -10]}>
+                <div style={compactPopupWrapper}>
+                  <strong style={{ color: '#2F5D3A', fontSize: '14px' }}>{p.name}</strong>
+                  <div style={{ marginTop: '10px' }}>
+                    <button onClick={() => openNavModal(p)} style={compactGoBtn}>Åk hit 🚐</button>
                   </div>
-                  <button onClick={() => openNavModal(poi)} style={goButtonStyle}>Åk hit 🚐</button>
-                  <button onClick={() => triggerAddFlow(poi)} style={{ ...goButtonStyle, backgroundColor: 'transparent', color: '#2F5D3A', marginTop: '8px', border: '1px solid #2F5D3A' }}>➕ Föreslå</button>
                 </div>
               </Popup>
             </Marker>
           ))}
+
+          {filteredPois.map(poi => (
+            <Marker key={poi.id} position={[poi.lat, poi.lng]} icon={getMarkerIconForPoi(poi)}>
+              <Popup autoPan={true} offset={[0, -10]}>
+                <div style={compactPopupWrapper}>
+                  <strong style={{ color: '#2F5D3A', fontSize: '14px' }}>{poi.name}</strong>
+                  <hr style={{ margin: '5px 0', border: '0', borderTop: '1px solid #E6E2D9' }} />
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '4px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                    {poi.serviceFlags.parking && <div style={popupIconBoxStyle}><MapPin size={10} color="#2e7d32" /></div>}
+                    {poi.serviceFlags.camp_site && <div style={popupIconBoxStyle}><Tent size={10} color="#7b1fa2" /></div>}
+                    {poi.serviceFlags.freshwater && <div style={popupIconBoxStyle}><Droplet size={10} color="#1976D2" /></div>}
+                    {poi.serviceFlags.electricity && <div style={popupIconBoxStyle}><Zap size={10} color="#D4A017" /></div>}
+                  </div>
+                  <button onClick={() => openNavModal(poi)} style={compactGoBtn}>Åk hit 🚐</button>
+                  <button onClick={() => triggerAddFlow(poi)} style={compactSuggestBtn}>➕ Föreslå</button>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
           {activeFilters.hidden_gems && communityPois.officials.map(p => (<Marker key={p.id} position={[p.latitude, p.longitude]} icon={officialStarIcon} />))}
-          {tempMarker && <Marker position={tempMarker} icon={redIcon}><Popup autoOpen><div style={{ textAlign: 'center' }}><h3>Nytt resmål?</h3><button onClick={() => triggerAddFlow(modalDraft)} style={goButtonStyle}>➕ Föreslå plats</button></div></Popup></Marker>}
+          
+          {tempMarker && (
+            <Marker position={tempMarker} icon={redIcon}>
+              <Popup autoOpen>
+                <div style={{ ...compactPopupWrapper, textAlign: 'center' }}>
+                  <strong style={{fontSize: '13px', display: 'block', marginBottom: '8px'}}>Nytt resmål?</strong>
+                  <button onClick={() => triggerAddFlow(modalDraft)} style={compactGoBtn}>➕ Föreslå plats</button>
+                </div>
+              </Popup>
+            </Marker>
+          )}
         </MapContainer>
         <div style={legendButtonStyle} onClick={openFindModal}><Search size={16}/><span>Hitta POIs</span></div>
       </div>
@@ -504,7 +528,6 @@ function ConvoyView({ currentUser }) {
         })}
       </div>
 
-      {/* 🚨 SNYGG MODAL FÖR ATT LÄMNA KONVOJEN 🚨 */}
       {showLeaveModal && (
         <div style={modalOverlayStyle} onClick={() => setShowLeaveModal(false)}>
           <div style={{ ...modalSheetStyle, textAlign: 'center', padding: '30px 24px' }} onClick={e => e.stopPropagation()}>
@@ -587,10 +610,40 @@ function ConvoyView({ currentUser }) {
   );
 }
 
-// --- STYLES ---
+// --- STYLES & HELPER STYLES ---
+const compactPopupWrapper = { 
+  maxHeight: '160px', 
+  width: '190px', 
+  overflowY: 'auto', 
+  padding: '8px 5px',
+  scrollbarWidth: 'thin'
+};
+const compactGoBtn = { width: '100%', padding: '8px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer' };
+const compactSuggestBtn = { width: '100%', padding: '8px', backgroundColor: 'transparent', color: '#2F5D3A', marginTop: '8px', border: '1px solid #2F5D3A', borderRadius: '12px', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer' };
+
 const popupIconBoxStyle = { backgroundColor: '#F0F4F4', padding: '4px 6px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const mapWrapperStyle = { height: '350px', borderRadius: '28px', overflow: 'hidden', marginBottom: '20px', border: '5px solid #F9F7F2', position: 'relative' };
-const legendButtonStyle = { position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, backgroundColor: 'rgba(255, 255, 255, 0.95)', padding: '8px 16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #EEE7DB', cursor: 'pointer', fontSize: '13px', fontWeight: '700', color: '#47525d' };
+
+const legendButtonStyle = { 
+  position: 'absolute', 
+  top: '12px', 
+  left: '50%', 
+  transform: 'translateX(-50%)', 
+  zIndex: 500, // SÄNKT: Lägre än popuperna på 700
+  backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+  padding: '8px 16px', 
+  borderRadius: '12px', 
+  display: 'flex', 
+  alignItems: 'center', 
+  gap: '8px', 
+  boxShadow: '0 4px 12px rgba(0,0,0,0.1)', 
+  border: '1px solid #EEE7DB', 
+  cursor: 'pointer', 
+  fontSize: '13px', 
+  fontWeight: '700', 
+  color: '#47525d' 
+};
+
 const centerMapBtnStyle = { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FAF9F6', color: '#2F5D3A', border: '1px solid #E5E0D8', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' };
 const searchInputStyle = { width: '100%', padding: '14px 14px 14px 38px', borderRadius: '16px', border: '2px solid #ECE7DF', outline: 'none', backgroundColor: '#FAF9F6', boxSizing: 'border-box' };
 const searchResultsDropdownStyle = { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: '#FFF', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', border: '1px solid #ECE7DF', marginTop: '8px', zIndex: 4000, maxHeight: '300px', overflowY: 'auto' };
@@ -599,7 +652,6 @@ const addBtnStyle = { backgroundColor: '#2F5D3A', border: 'none', borderRadius: 
 const countInfoStyle = { fontSize: '11px', fontWeight: '800', color: '#98A4A5', textAlign: 'right', textTransform: 'uppercase', marginBottom: '5px' };
 const proposalCardStyle = { padding: '20px', borderRadius: '24px' };
 const voteBtnStyle = { display: 'flex', alignItems: 'center', border: 'none', padding: '6px 12px', borderRadius: '12px', fontSize: '13px', fontWeight: 'bold' };
-const goButtonStyle = { width: '100%', padding: '12px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '14px', fontWeight: 'bold' };
 const deleteBtnStyle = { background: 'none', border: 'none', color: '#98A4A5', cursor: 'pointer', marginLeft: '8px' };
 const modalOverlayStyle = { position: 'fixed', inset: 0, zIndex: 5000, backgroundColor: 'rgba(24, 29, 26, 0.56)', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const modalSheetStyle = { width: '90%', maxWidth: '430px', backgroundColor: '#FAF9F6', borderRadius: '28px', padding: '24px', boxSizing: 'border-box', boxShadow: '0 24px 60px rgba(0,0,0,0.18)' };
