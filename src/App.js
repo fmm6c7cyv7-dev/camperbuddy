@@ -673,7 +673,10 @@ function App() {
       {assistantMounted && (
         <div style={{ ...assistantOverlayStyle, opacity: assistantVisible ? 1 : 0, pointerEvents: assistantVisible ? 'auto' : 'none' }}>
           <div style={{ ...bottomSheetStyle, transform: assistantVisible ? 'translateY(0)' : 'translateY(150%)', opacity: assistantVisible ? 1 : 0.98 }}>
-            <h2 style={assistantTitleStyle}>Härlig plats! 👋</h2>
+            <h2 style={{ ...assistantTitleStyle, textAlign: "center" }}>
+  Noterar att du stannat! <br />
+  Vill du logga platsen? 👋
+</h2>
             <p style={assistantLeadStyle}>Stannat vid <b>{detectedLocation}</b>?</p>
             <div style={infoRowStyle}>
               <div style={iconBox}><Eye size={22} color="#8B9798" /><span>Utsikt</span></div>
@@ -682,10 +685,10 @@ function App() {
             </div>
             <div style={{ display: 'flex', gap: '14px', width: '100%' }}>
               <button style={{ ...primaryBtn, flex: 1, width: 'auto' }} onClick={handleAssistantToComposer}>
-                Ja, spara 📸
+                Ja, notera i loggboken   📸
               </button>
               <button style={{ ...secondaryBtn, flex: 1, borderRadius: '16px', fontSize: '18px', fontWeight: 700, padding: '16px' }} onClick={() => closeAssistantModal({ dismissUntilMove: true })}>
-                Nej tack
+                Nej tack, åker vidare
               </button>
             </div>
           </div>
@@ -742,7 +745,7 @@ function App() {
         <div style={modalOverlayStyle} onClick={closeComposer}>
           <div style={modalStyle} className="animate-slide-up" onClick={(e) => e.stopPropagation()}>
             <div style={modalHeaderStyle}>
-              <h2 style={sheetTitleStyle}>{composerDraft.id ? 'Redigera minne' : 'Skapa minne'}</h2>
+              <h2 style={sheetTitleStyle}>{composerDraft.id ? 'Redigera Loggboksanteckning' : 'Skapa Loggboksanteckning'}</h2>
               <button onClick={closeComposer} style={iconOnlyBtnStyle}><X /></button>
             </div>
             <input type="text" placeholder="Rubrik" value={composerDraft.title} onChange={(e) => setComposerDraft((prev) => ({ ...prev, title: e.target.value }))} style={inputStyle} />

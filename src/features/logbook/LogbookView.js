@@ -112,7 +112,7 @@ function LogbookView({ currentUser, onOpenComposer, refreshKey }) {
   return (
     <div style={{ padding: '20px', paddingBottom: '120px' }}>
       <header style={{ marginBottom: '30px' }}>
-        <h1 style={{ fontSize: '26px', fontWeight: '900', color: '#243137', margin: 0 }}>Min Loggbok</h1>
+        <h1 style={{ fontSize: '26px', fontWeight: '900', color: '#243137', margin: 0 }}>Loggboksanteckningar</h1>
         <p style={{ color: '#98A4A5', fontSize: '14px' }}>Dina samlade äventyr ({entries.length} st)</p>
       </header>
 
@@ -162,7 +162,7 @@ function LogbookView({ currentUser, onOpenComposer, refreshKey }) {
         <div style={modalOverlayStyle} onClick={() => setEditingEntry(null)}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, fontSize: '20px', color: '#243137' }}>Redigera minne</h2>
+              <h2 style={{ margin: 0, fontSize: '20px', color: '#243137' }}>Redigera loggboksanteckning</h2>
               <button onClick={() => setEditingEntry(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X /></button>
             </div>
             
