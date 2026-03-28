@@ -19,7 +19,7 @@ L.Icon.Default.mergeOptions({
 });
 
 function MapEvents({ onMapClick, onBoundsChange }) {
-  const map = useMapEvents({
+  const map = useMapEvents({ 
     click(e) { onMapClick(e.latlng); },
     moveend() { onBoundsChange(map.getBounds()); },
     zoomend() { onBoundsChange(map.getBounds()); }
@@ -148,7 +148,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     try {
       const joinCode = generateJoinCode();
       
-      // 1. Skapa "Rummet" i databasen
       const { data: convoyData, error: convoyError } = await supabase
         .from('convoys')
         .insert([{ 
@@ -161,7 +160,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
 
       if (convoyError) throw convoyError;
 
-      // 2. Placera dig själv i rummet
       const { error: buddyError } = await supabase
         .from('buddies')
         .update({ current_convoy_id: convoyData.id })
@@ -169,10 +167,8 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
 
       if (buddyError) throw buddyError;
 
-      // Sätt det aktiva rummet lokalt så knappen ändrar sig direkt
       setActiveConvoy({ id: convoyData.id, join_code: convoyData.join_code });
 
-      // 3. Hantera inbjudan (Magic Link)
       if (withInvite) {
         const shareUrl = `https://camper-buddy.vercel.app/?join=${joinCode}`;
         if (navigator.share) {
@@ -198,7 +194,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     }
   };
 
-  // FUNKTION: Går till vinnaren i Konvoj
   const handleGoToTopProposal = (proposal) => {
     if (proposal && proposal.latitude && proposal.longitude) {
       sessionStorage.setItem('openConvoyFocus', JSON.stringify({
@@ -244,7 +239,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
 
   const [showShareModal, setShowShareModal] = useState(false);
   
-  // Uppdaterad inbjudningslänk (med join-kod om vi har ett aktivt rum)
   const inviteLink = activeConvoy 
     ? `https://camper-buddy.vercel.app/?join=${activeConvoy.join_code}` 
     : "https://camper-buddy.vercel.app/";
@@ -321,11 +315,9 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     }
   };
 
-  // --- SÄKER UPPFÖLJNING AV DATA ---
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // 1. Kolla om vi är i ett rum
       let roomId = null;
       if (currentUser?.id) {
         const { data: buddyData } = await supabase
@@ -348,7 +340,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         }
       }
 
-      // 2. Hämta FÖRSLAG (Säkerhetslåst till DITT rum)
       if (roomId) {
         const { data: propsData } = await supabase
           .from('proposals')
@@ -364,12 +355,11 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         setTopProposal(null);
       }
 
-      // 3. Hämta LOGGBOK (Säkerhetslåst till DIN profil)
       if (currentUser?.id) {
         const { data: logData } = await supabase
           .from('logbook')
           .select('*')
-          .eq('buddy_id', currentUser.id) // Låset!
+          .eq('buddy_id', currentUser.id)
           .order('created_at', { ascending: false })
           .limit(1);
 
@@ -380,7 +370,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         }
       }
 
-      // 4. Hämta POIs (Dessa är globala och ska synas för alla)
       const { data: poiData } = await supabase.from('pois').select('*').limit(10000);
       setPois(Array.isArray(poiData) ? poiData : []);
 
@@ -432,7 +421,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
 
   const visiblePois = useMemo(() => {
     if (!mapBounds || filteredPois.length === 0) return [];
-    // Lägg till 20% marginal så att kartan inte laddar för tätt inpå kanterna när man drar
     const paddedBounds = mapBounds.pad(0.2); 
     return filteredPois.filter(poi => paddedBounds.contains([poi.lat, poi.lng]));
   }, [filteredPois, mapBounds]);
@@ -525,7 +513,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
     <>
       <div style={{ padding: '10px 20px 100px 20px' }} className="animate-fade-in">
         
-        {/* --- NY LAYOUT: VÄDER OCH INBJUDAN --- */}
         <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'stretch' }}>
           
           <div style={{ ...weatherCardStyle, flex: 3, margin: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '14px 10px' }}>
@@ -541,7 +528,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             </div>
           </div>
 
-          {/* DYNAMISK KNAPP: Byter färg och text om man redan är i en Konvoj */}
           <div 
             onClick={() => activeConvoy ? setShowShareModal(true) : setShowConvoyMenu(true)}
             style={{ 
@@ -578,12 +564,19 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
 
             {visiblePois.map((poi) => (
               <Marker key={poi.id} position={[poi.lat, poi.lng]} icon={getMarkerIconForPoi(poi)}>
-                <Popup>
-                  <div style={{ minWidth: '180px' }}>
-                    <strong style={{ color: '#2F5D3A', fontSize: '15px' }}>{poi.name || 'Plats'}</strong>
-                    <hr style={{ margin: '8px 0', border: '0', borderTop: '1px solid #E6E2D9' }} />
-                    <p style={{ fontSize: '11px', color: '#667276', marginBottom: '10px' }}>{poi.description || poi.address}</p>
-                    <button onClick={() => openNavModal(poi)} style={goButtonStyle}>Åk hit 🚐</button>
+                <Popup autoPan={true} offset={[0, -10]}>
+                  {/* --- KOMPAKT OCH RULLBAR POPUP SOM HAMNAR ÖVERST --- */}
+                  <div style={{ 
+                    maxHeight: '150px', 
+                    width: '190px', 
+                    overflowY: 'auto', 
+                    padding: '8px 5px',
+                    scrollbarWidth: 'thin'
+                  }}>
+                    <strong style={{ color: '#2F5D3A', fontSize: '13px' }}>{poi.name || 'Plats'}</strong>
+                    <hr style={{ margin: '5px 0', border: '0', borderTop: '1px solid #E6E2D9' }} />
+                    <p style={{ fontSize: '10px', color: '#667276', marginBottom: '8px', lineHeight: '1.4' }}>{poi.description || poi.address}</p>
+                    <button onClick={() => openNavModal(poi)} style={{...goButtonStyle, padding: '8px', fontSize: '13px'}}>Åk hit 🚐</button>
                   </div>
                 </Popup>
               </Marker>
@@ -593,28 +586,28 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
               <Marker position={[tempMarker.lat, tempMarker.lng]} icon={redIcon}>
                 <Popup autoOpen>
                   <div style={{ textAlign: 'center', minWidth: '160px', padding: '5px' }}>
-                    <strong style={{ display: 'block', marginBottom: '8px' }}>{newPoi.name}</strong>
-                    <button onClick={() => setShowCreateModal(true)} style={goButtonStyle}>➕ Lägg till plats</button>
+                    <strong style={{ display: 'block', marginBottom: '8px', fontSize: '13px' }}>{newPoi.name}</strong>
+                    <button onClick={() => setShowCreateModal(true)} style={{...goButtonStyle, padding: '8px', fontSize: '13px'}}>➕ Lägg till plats</button>
                   </div>
                 </Popup>
               </Marker>
             )}
 
             {activeFilters.hidden_gems && communityPois.officials.map((poi) => {
-              if (!poi.latitude || !poi.longitude) return null;
-              
-              // 🚨 NYTT: Kontrollera om pärlan är inom den synliga kartan
-              if (mapBounds && !mapBounds.pad(0.2).contains([poi.latitude, poi.longitude])) {
-                return null; 
-              }
-
+              if (!poi.latitude || !poi.longitude || (mapBounds && !mapBounds.pad(0.2).contains([poi.latitude, poi.longitude]))) return null;
               return (
                 <Marker key={poi.id} position={[poi.latitude, poi.longitude]} icon={officialStarIcon}>
-                  <Popup>
-                    <div style={{ minWidth: '160px', textAlign: 'center' }}>
-                      <Star size={24} fill="#FFD700" color="#B8860B" style={{ margin: '0 auto 5px auto' }} />
-                      <strong style={{ color: '#B8860B', display: 'block' }}>{poi.name}</strong>
-                      <button onClick={() => openNavModal(poi)} style={{...goButtonStyle, marginTop: '10px'}}>Åk hit 🚐</button>
+                  <Popup offset={[0, -10]}>
+                    <div style={{ 
+                      maxHeight: '150px', 
+                      width: '160px', 
+                      overflowY: 'auto', 
+                      textAlign: 'center',
+                      padding: '8px 5px'
+                    }}>
+                      <Star size={20} fill="#FFD700" color="#B8860B" style={{ margin: '0 auto 5px auto' }} />
+                      <strong style={{ color: '#B8860B', display: 'block', fontSize: '13px' }}>{poi.name}</strong>
+                      <button onClick={() => openNavModal(poi)} style={{...goButtonStyle, marginTop: '10px', padding: '8px', fontSize: '13px'}}>Åk hit 🚐</button>
                     </div>
                   </Popup>
                 </Marker>
@@ -662,7 +655,7 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             </div>
           </div>
           <div style={smallSectionStyle} onClick={() => setActiveTab('logbook')}>
-            <div style={sectionHeaderStyle}><Clock size={14} color="#4D93C7" /> MIN SENSTE LOGG</div>
+            <div style={sectionHeaderStyle}><Clock size={14} color="#4D93C7" /> MIN SENASTE LOGG</div>
             <div style={miniCardStyle}><h4 style={miniTitleStyle}>{latestEntry?.location || 'Inga minnen'}</h4></div>
           </div>
         </div>
@@ -708,7 +701,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {/* Alternativ 1: Soloresa */}
               <button 
                 onClick={() => handleStartTrip(false)}
                 disabled={isLoadingConvoy}
@@ -723,7 +715,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
                 </div>
               </button>
 
-              {/* Alternativ 2: Bjud in vänner */}
               <button 
                 onClick={() => handleStartTrip(true)}
                 disabled={isLoadingConvoy}
@@ -755,7 +746,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         </div>
       )}
 
-      {/* --- SHARE MODAL --- */}
       {showShareModal && (
         <div style={{ ...modalOverlayStyle, opacity: 1, zIndex: 6000 }} onClick={() => setShowShareModal(false)}>
           <div style={{ ...modalSheetStyle, padding: '24px' }} className="animate-slide-up" onClick={(e) => e.stopPropagation()}>
@@ -779,7 +769,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         </div>
       )}
 
-      {/* --- FILTER MODAL --- */}
       {filterModalRendered && (
         <div style={{ ...modalOverlayStyle, opacity: filterModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeFilterModal}>
           <div style={{ ...modalSheetStyle, transform: filterModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)' }} onClick={(e) => e.stopPropagation()}>
@@ -803,7 +792,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         </div>
       )}
 
-      {/* --- CREATE POI MODAL --- */}
       {showCreateModal && (
         <div style={modalOverlayStyle} onClick={() => setShowCreateModal(false)}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
@@ -827,7 +815,6 @@ function DashboardView({ setActiveTab, onOpenLogbookPhotoFlow, currentUser }) {
         </div>
       )}
 
-      {/* --- NAVIGATION MODAL --- */}
       {navModalRendered && (
         <div style={{ ...modalOverlayStyle, opacity: navModalVisible ? 1 : 0, transition: 'opacity 0.4s ease' }} onClick={closeNavModal}>
           <div style={{ ...modalSheetStyle, transform: navModalVisible ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)', padding: '20px 24px 40px 24px' }} onClick={e => e.stopPropagation()}>
@@ -850,16 +837,17 @@ const loadingStateStyle = { textAlign: 'center', marginTop: '100px', color: '#8B
 const weatherCardStyle = { background: '#F7F4EE', border: '1px solid #E8E1D6', borderRadius: '20px', padding: '12px 16px', marginBottom: '14px' };
 const weatherItemStyle = { display: 'flex', alignItems: 'center', gap: '5px' };
 const mapContainerStyle = { height: '350px', width: '100%', borderRadius: '28px', overflow: 'hidden', marginBottom: '25px', position: 'relative', border: '5px solid #F9F7F2' };
+
 const legendButtonStyle = { 
   position: 'absolute', 
-  top: '12px', // Flyttad från bottom: 15px
+  top: '12px', 
   left: '50%', 
   transform: 'translateX(-50%)', 
-  zIndex: 2000, 
+  zIndex: 500, // 🚨 SÄNKT: Nu lägre än Leaflet Popup (700) för att inte blockera
   backgroundColor: 'rgba(255, 255, 255, 0.92)', 
-  backdropFilter: 'blur(4px)', // Ger den snygga glaskänslan
+  backdropFilter: 'blur(4px)', 
   padding: '8px 16px', 
-  borderRadius: '12px', // Ändrad från 999px till 12px för rektangulär look
+  borderRadius: '12px', 
   display: 'flex', 
   alignItems: 'center', 
   gap: '10px', 
@@ -867,6 +855,7 @@ const legendButtonStyle = {
   border: '1px solid #EEE7DB',
   cursor: 'pointer' 
 };
+
 const dot = { width: '10px', height: '10px', borderRadius: '50%' };
 const centerMapBtnStyle = { display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#FAF9F6', color: '#2F5D3A', border: '1px solid #E5E0D8', padding: '8px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' };
 const summaryGridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' };
@@ -897,7 +886,6 @@ const saveBtnStyle = { width: '100%', padding: '16px', backgroundColor: '#2F5D3A
 const navOptionBtnStyle = { width: '100%', padding: '16px', backgroundColor: 'white', border: '1px solid #E6DED1', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '16px', fontWeight: 'bold', color: '#334247' };
 const cancelBtnStyle = { width: '100%', padding: '14px', border: 'none', background: 'none', color: '#95A5A6', fontSize: '14px', marginTop: '10px', fontWeight: 'bold' };
 const modalStyle = { backgroundColor: 'white', padding: '25px', borderRadius: '28px', width: '90%', maxWidth: '400px', alignSelf: 'center', marginBottom: '100px' };
-
 const shareMainBtnStyle = { width: '100%', padding: '16px', backgroundColor: '#2F5D3A', color: 'white', border: 'none', borderRadius: '16px', fontSize: '15px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer' };
 const shareSecondaryBtnStyle = { width: '100%', padding: '14px', backgroundColor: 'white', color: '#334247', border: '1px solid #E6DED1', borderRadius: '16px', fontSize: '14px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' };
 
